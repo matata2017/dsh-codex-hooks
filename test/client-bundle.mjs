@@ -322,12 +322,16 @@ export async function runClientBundleCheck() {
 
   await tick()
 
-  await check('client/工具栏图标不再显示待审核角标', () => {
-    if (findRow(renderTrigger(), '__dh_triggerBadge')) throw new Error('the trigger still renders a count badge')
-    return 'no badge'
+  await check('client/工具栏图标用红点提示待审核，不带数字', () => {
+    const dot = findRow(renderTrigger(), '__dh_dot')
+    if (!dot) throw new Error('the pending dot is missing')
+    if (text(dot).join('')) throw new Error('the dot must not carry a number')
+    return 'dot'
   })
 
-  await check('client/有待审核钩子时自动打开审查弹窗（Codex 样式）', async () => {
+  await check('client/点工具栏图标打开审查弹窗（Codex 样式）', async () => {
+    const button = findRow(renderTrigger(), '__dh_trigger')
+    button.props.onClick()
     await settle()
     const rendered = text(renderOverlay()).join(' ')
     for (const needle of ['reviewTitle', 'echo-hook', 'newBadge', 'notNow', 'allowAll', 'allowSelected', 'settingsLink']) {

@@ -216,6 +216,7 @@ window.__ModuleLoader__.load({
       '.__dh_trigger{position:relative;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary,#4b5563);cursor:pointer}',
       '.__dh_trigger:hover{background:var(--dsw-alias-interactive-bg-hover,#f2f4f7)}',
       '.__dh_trigger[data-open="true"]{background:var(--dsw-alias-interactive-bg-hover,#f2f4f7);color:var(--dsw-alias-label-primary,#1f2328)}',
+      '.__dh_dot{position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-error-primary,#f85149);pointer-events:none}',
       '.__dh_dlg{position:fixed;z-index:1200;box-sizing:border-box;min-width:340px;max-width:min(440px,calc(100vw - 24px));max-height:min(72vh,560px);overflow:auto;border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:14px;background:var(--dsw-alias-bg-base,#fff);box-shadow:var(--dsw-elevation-prominent);padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-primary,#1f2328);text-align:left}',
       '.__dh_dlgTitle{font-size:15px;font-weight:600}',
       '.__dh_dlgBody{display:flex;flex-direction:column;gap:6px}',
@@ -675,7 +676,7 @@ window.__ModuleLoader__.load({
       const conn = useConnection()
       const view = useUi()
       const ref = React.useRef(null)
-      const asked = React.useRef(false)
+      const [needsReview, setNeedsReview] = React.useState(false)
 
       React.useEffect(() => {
         triggerEl = ref.current
@@ -684,20 +685,21 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
-      // Codex asks for review the moment hooks need trusting; no badge, no arithmetic.
-      React.useEffect(() => {
-        if (!conn || asked.current) return undefined
-        asked.current = true
-        let cancelled = false
-        call('review', {})
-          .then((value) => {
-            if (!cancelled && (value?.hooks ?? []).length > 0) openReview()
-          })
-          .catch(() => {})
-        return () => {
-          cancelled = true
+      // A dot, not a number: a count goes stale the moment someone trusts a hook elsewhere.
+      const checkPending = React.useCallback(async () => {
+        if (!conn) return
+        try {
+          const value = await call('review', {})
+          setNeedsReview((value?.hooks ?? []).length > 0)
+        } catch {
+          /* the host may not answer before it is ready; the dot just stays off */
         }
       }, [conn])
+
+      React.useEffect(() => {
+        checkPending()
+      }, [checkPending])
+      useRevision(checkPending)
 
       return h(
         'button',
@@ -708,11 +710,12 @@ window.__ModuleLoader__.load({
           title: t('triggerLabel'),
           'aria-label': t('triggerLabel'),
           'aria-haspopup': 'dialog',
-          'aria-expanded': view.view === 'browser' ? 'true' : 'false',
-          'data-open': view.view === 'browser' ? 'true' : 'false',
-          onClick: () => (view.view === 'browser' ? closeOverlay() : openBrowser()),
+          'aria-expanded': view.view === 'review' ? 'true' : 'false',
+          'data-open': view.view === 'review' ? 'true' : 'false',
+          onClick: () => (view.view === 'review' ? closeOverlay() : openReview()),
         },
         hookIcon(),
+        needsReview ? h('span', { className: '__dh_dot' }) : null,
       )
     }
 
