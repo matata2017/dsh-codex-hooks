@@ -1,0 +1,92 @@
+# dsh-codex-hooks
+
+Codex-compatible lifecycle hooks for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh).
+
+It reads the same `hooks.json` format Codex uses, shows every discovered hook in a **Hooks** section of dsh settings, and runs the ones you trust on the matching dsh lifecycle event.
+
+## What it actually does
+
+- **Discovers** `hooks.json` from three places, grouped in the UI:
+  - **From Config** — `$DSH_HOME/hooks.json` (default `~/.dsh/hooks.json`) and `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`).
+  - **From Plugins** — every package inside the active profile that ships a `hooks.json`.
+  - **From Projects** — `<workspace>/.dsh/hooks.json` for the workspaces this session has touched (up to 32 remembered).
+- **Fingerprints** each hook exactly like Codex: normalized JSON of the hook definition, `sha256:` over its UTF-8 bytes. The fingerprint is what the trust decision is pinned to, so editing a hook's command invalidates its trust instead of silently running new code.
+- **Reviews trust per hook** in the settings page: new hooks start in *needs review*; you approve the current fingerprint, and the state lives in `$DSH_HOME/hooks.state.json` together with an independent enabled/disabled switch per hook.
+- **Runs** `command` and `mcp_tool` handlers only when they are enabled *and* trusted, with the hook's own timeout, `cwd`, environment and `command`/`commandWindows` split.
+- **Injects context**: for `PreToolUse`, `PostToolUse`, `SessionStart`, `UserPromptSubmit` and `SubagentStart`, a handler's `additionalContext` is appended to the model input (2500 characters by default).
+- **Matches** the events that have a matcher (`PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SessionStart`, `SessionEnd`, `SubagentStart`, `SubagentStop`), using the same wildcard and regex forms as Codex.
+
+### Events
+
+The 14 Codex events are mapped onto dsh's own runtime events:
+
+| Codex event | dsh event | can block |
+| --- | --- | --- |
+| `PreModelRequest` | `agent/request` | no |
+| `PreToolUse` | `tools/pre-execute` | yes |
+| `PostToolUse` | `tools/post-execute` | yes |
+| `PermissionRequest` | `approval/request` | yes |
+| `UserPromptSubmit` | `agent/pre-step` | yes |
+| `SessionStart` | `agent/created` | no |
+| `SubagentStart` | `agent/created` | no |
+| `Stop` | `agent/turn-stopping` | no |
+| `SubagentStop` | `agent/turn-stopping` | no |
+| `SessionEnd` | `session/disposed` | no |
+| `PostModelRequest`, `PreCompact`, `PostCompact`, `Interrupt` | — parsed and reviewable, not dispatched yet | — |
+
+Default timeout is 600s, except `SessionEnd` (1s default, 3s maximum) so shutdown cannot hang.
+
+## Install
+
+Requires dsh `0.1.0-rc.6` or newer and Node 20+.
+
+```bash
+# from GitHub
+dsh plugin --profile desktop add github:matata2017/dsh-codex-hooks
+
+# or from a local checkout, which is how this project is developed
+dsh plugin --profile desktop add /path/to/dsh-codex-hooks
+```
+
+Restart the dsh web/desktop host afterwards, then open **Settings → Hooks**.
+
+## Configure
+
+`~/.dsh/hooks.json` (same shape as Codex):
+
+```json
+{
+  "description": "my hooks",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./examples/echo-hook.mjs SessionStart",
+            "commandWindows": "node.exe ./examples/echo-hook.mjs SessionStart",
+            "timeout": 15,
+            "statusMessage": "echo-hook: session started"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Handler types: `command`, `mcp_tool` (both executable), `prompt`, `agent` (parsed and reviewable, not dispatched yet).
+
+## Verification status
+
+- `node test/run-tests.mjs` → **78 passed, 0 failed, 0 skipped**, including 8 fingerprints captured from a real Codex installation (`test/vectors.json`).
+- `UserPromptSubmit` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
+- `selftest/host-e2e.mjs` exercises the host side against a real profile.
+
+## Security
+
+Hooks execute real commands with the permissions of the dsh process. That is why trust is pinned to the sha256 fingerprint of each hook: approving a hook approves exactly that command line, and any edit requires a new approval. Only enable hooks you have read.
+
+## License
+
+MIT

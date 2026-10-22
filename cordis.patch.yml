@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-hooks
+      name: 'dsh-codex-hooks'

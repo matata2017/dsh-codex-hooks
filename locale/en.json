@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Hooks",
+    "description": "Manage lifecycle hooks loaded from your configuration, plugins and projects."
+  }
+}

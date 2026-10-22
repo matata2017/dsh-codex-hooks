@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="DSH Hooks">
+  <title>DSH Hooks</title>
+  <rect x="8" y="14" width="48" height="36" rx="8" fill="none" stroke="#3964fe" stroke-width="3"/>
+  <path d="M24 14v-4a4 4 0 0 1 8 0v4" fill="none" stroke="#3964fe" stroke-width="3" stroke-linecap="round"/>
+  <path d="M40 14v-4a4 4 0 0 1 8 0v12" fill="none" stroke="#3964fe" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="24" cy="32" r="4" fill="#3964fe"/>
+  <circle cx="40" cy="32" r="4" fill="#3964fe"/>
+  <path d="M20 44h24" stroke="#3964fe" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Hooks",
+    "description": "管理来自配置、插件与项目的生命周期钩子。"
+  }
+}

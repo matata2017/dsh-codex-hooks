@@ -1,0 +1,6 @@
+node_modules/
+.gh-local/
+.workbuddy/
+*.log
+.tmp-*/
+HANDOFF.md

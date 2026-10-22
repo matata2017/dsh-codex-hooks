@@ -1,0 +1,148 @@
+{
+  "_doc": [
+    "Ground-truth vectors for the DSH Hooks plugin.",
+    "hashVectors[].trustedHash values were produced by the real OpenAI Codex CLI (codex-rs)",
+    "and read back from this machine's C:\\Users\\Admin\\.codex\\config.toml [hooks.state] tables.",
+    "They are the authoritative check for the trust-hash algorithm.",
+    "platform records the OS the hash was computed on: CODEX normalizes `commandWindows` on",
+    "Windows only, so the trusted hash is platform dependent.",
+    "parseVectors are transcribed from codex-rs/config/src/hooks_tests.rs."
+  ],
+  "hashVectors": [
+    {
+      "name": "codex-user-hooks-user_prompt_submit",
+      "sourcePath": "C:\\Users\\Admin\\.codex\\hooks.json",
+      "stateKey": "C:\\Users\\Admin\\.codex\\hooks.json:user_prompt_submit:0:0",
+      "event": "UserPromptSubmit",
+      "groupIndex": 0,
+      "handlerIndex": 0,
+      "matcher": null,
+      "platform": "win32",
+      "handler": {
+        "type": "command",
+        "command": "node \"C:/Users/Admin/.codex/hooks/memos-project-router.cjs\" UserPromptSubmit",
+        "commandWindows": "node.exe \"C:/Users/Admin/.codex/hooks/memos-project-router.cjs\" UserPromptSubmit",
+        "timeout": 60,
+        "statusMessage": "Retrieving MemOS memory"
+      },
+      "trustedHash": "sha256:033537218e7596b56e5e13eb5544e723cfe4421302c4435f4e117016f78b8b10"
+    },
+    {
+      "name": "codex-user-hooks-stop",
+      "sourcePath": "C:\\Users\\Admin\\.codex\\hooks.json",
+      "stateKey": "C:\\Users\\Admin\\.codex\\hooks.json:stop:0:0",
+      "event": "Stop",
+      "groupIndex": 0,
+      "handlerIndex": 0,
+      "matcher": null,
+      "platform": "win32",
+      "handler": {
+        "type": "command",
+        "command": "node \"C:/Users/Admin/.codex/hooks/memos-project-router.cjs\" Stop",
+        "commandWindows": "node.exe \"C:/Users/Admin/.codex/hooks/memos-project-router.cjs\" Stop",
+        "timeout": 60,
+        "statusMessage": "Saving MemOS memory"
+      },
+      "trustedHash": "sha256:cfaf54cb72820ddac8105b679dfd4dd0d243806b49e7f54af5145e9dd0b2673f"
+    },
+    {
+      "name": "ponytail-plugin-session_start",
+      "sourcePath": "ponytail@ponytail:hooks/claude-codex-hooks.json",
+      "stateKey": "ponytail@ponytail:hooks/claude-codex-hooks.json:session_start:0:0",
+      "event": "SessionStart",
+      "groupIndex": 0,
+      "handlerIndex": 0,
+      "matcher": "startup|resume|clear|compact",
+      "platform": "win32",
+      "handler": {
+        "type": "command",
+        "command": "node -e \"require(require('path').join(process.env.CLAUDE_PLUGIN_ROOT.split(String.fromCharCode(92)).join('/'), 'hooks/ponytail-activate.js'))\"",
+        "timeout": 15,
+        "statusMessage": "Loading ponytail mode..."
+      },
+      "trustedHash": "sha256:defea43402fc8edba23234c694a1117cf80efc2da38968a40a1004cd9d63f725"
+    },
+    {
+      "name": "ponytail-plugin-subagent_start",
+      "sourcePath": "ponytail@ponytail:hooks/claude-codex-hooks.json",
+      "stateKey": "ponytail@ponytail:hooks/claude-codex-hooks.json:subagent_start:0:0",
+      "event": "SubagentStart",
+      "groupIndex": 0,
+      "handlerIndex": 0,
+      "matcher": null,
+      "platform": "win32",
+      "handler": {
+        "type": "command",
+        "command": "node -e \"require(require('path').join(process.env.CLAUDE_PLUGIN_ROOT.split(String.fromCharCode(92)).join('/'), 'hooks/ponytail-subagent.js'))\"",
+        "timeout": 15,
+        "statusMessage": "Loading ponytail mode..."
+      },
+      "trustedHash": "sha256:5b2c1dfa8c7ecc5e8881c8e69479f65d46ed727e0bc5b8e7b4553cee9e5c3daf"
+    },
+    {
+      "name": "ponytail-plugin-user_prompt_submit",
+      "sourcePath": "ponytail@ponytail:hooks/claude-codex-hooks.json",
+      "stateKey": "ponytail@ponytail:hooks/claude-codex-hooks.json:user_prompt_submit:0:0",
+      "event": "UserPromptSubmit",
+      "groupIndex": 0,
+      "handlerIndex": 0,
+      "matcher": null,
+      "platform": "win32",
+      "handler": {
+        "type": "command",
+        "command": "node -e \"require(require('path').join(process.env.CLAUDE_PLUGIN_ROOT.split(String.fromCharCode(92)).join('/'), 'hooks/ponytail-mode-tracker.js'))\"",
+        "timeout": 15,
+        "statusMessage": "Tracking ponytail mode..."
+      },
+      "trustedHash": "sha256:5aa5ec474e0bb546f207794993b37fdf7507e54a64e09216be164c5b7b42a197"
+    },
+    {
+      "name": "project-hooks-user_prompt_submit-0",
+      "sourcePath": "E:\\work\\huanghao\\pinrong-online\\.codex\\hooks.json",
+      "stateKey": "E:\\work\\huanghao\\pinrong-online\\.codex\\hooks.json:user_prompt_submit:0:0",
+      "event": "UserPromptSubmit",
+      "groupIndex": 0,
+      "handlerIndex": 0,
+      "matcher": null,
+      "platform": "win32",
+      "handler": {
+        "type": "command",
+        "command": "python -X utf8 .codex/hooks/inject-workflow-state.py",
+        "timeout": 15
+      },
+      "trustedHash": "sha256:16f16632a3c5d70397de44292a6f32276340ced7692635f22e58aad39182c07e"
+    },
+    {
+      "name": "project-hooks-user_prompt_submit-1",
+      "sourcePath": "E:\\work\\huanghao\\pinrong-online\\.codex\\hooks.json",
+      "stateKey": "E:\\work\\huanghao\\pinrong-online\\.codex\\hooks.json:user_prompt_submit:0:1",
+      "event": "UserPromptSubmit",
+      "groupIndex": 0,
+      "handlerIndex": 1,
+      "matcher": null,
+      "platform": "win32",
+      "handler": {
+        "type": "command",
+        "command": "python -X utf8 E:/work/huanghao/pinrong-online/.codex/hooks/requirements-drift.py",
+        "timeout": 15
+      },
+      "trustedHash": "sha256:878714e87b3d85b74be8c95e2635adc07929a7527dcb547166ee903ad1e66f1f"
+    },
+    {
+      "name": "project-hooks-stop-1",
+      "sourcePath": "E:\\work\\huanghao\\pinrong-online\\.codex\\hooks.json",
+      "stateKey": "E:\\work\\huanghao\\pinrong-online\\.codex\\hooks.json:stop:0:1",
+      "event": "Stop",
+      "groupIndex": 0,
+      "handlerIndex": 1,
+      "matcher": null,
+      "platform": "win32",
+      "handler": {
+        "type": "command",
+        "command": "python -X utf8 E:/work/huanghao/pinrong-online/.codex/hooks/requirements-drift.py",
+        "timeout": 15
+      },
+      "trustedHash": "sha256:acae62cf0760ddcf05ab25e683474d2d7b96b99ade806ce3ed1440b2d96d610d"
+    }
+  ]
+}
