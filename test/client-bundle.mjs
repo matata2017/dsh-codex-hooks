@@ -208,8 +208,14 @@ export async function runClientBundleCheck() {
     removeEventListener() {},
     navCells: [],
     dispatched: [],
-    querySelectorAll: () => document.navCells,
+    triggers: [],
+    querySelectorAll: (selector) => {
+      if (selector.includes('_navLabel')) return document.navCells
+      if (selector.includes('aria-haspopup')) return document.triggers
+      return []
+    },
     dispatchEvent: (event) => document.dispatched.push(event),
+    activeElement: null,
   }
 
   try {
@@ -386,7 +392,29 @@ export async function runClientBundleCheck() {
     return 'nav'
   })
 
-  await check('client/提示里的「设置」链接：设置没开时按快捷键并回退到钩子浏览器', async () => {
+  await check('client/提示里的「设置」链接：设置没开时点开设置再点自己的导航项', async () => {
+    document.dispatched = []
+    let triggerClicks = 0
+    document.triggers = [{ click: () => (triggerClicks += 1) }]
+    findRow(renderTrigger(), '__dh_trigger').props.onClick()
+    await settle()
+    const link = findByText(renderOverlay(), 'settingsLink')
+    const button = findRow(link, '__dh_link')
+    button.props.onClick()
+    await settle()
+    if (triggerClicks !== 1) throw new Error(`settings trigger not clicked: ${triggerClicks}`)
+    let navClicks = 0
+    document.navCells = [{ textContent: 'nav', closest: () => ({ click: () => (navClicks += 1) }) }]
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    document.navCells = []
+    document.triggers = []
+    if (navClicks !== 1) throw new Error(`nav entry not clicked: ${navClicks}`)
+    if (document.dispatched.length !== 0) throw new Error('the shortcut is only a last resort')
+    if (text(renderOverlay()).length !== 0) throw new Error('our panel must stay closed')
+    return 'settings'
+  })
+
+  await check('client/提示里的「设置」链接：接不住时回退到钩子浏览器', async () => {
     document.dispatched = []
     findRow(renderTrigger(), '__dh_trigger').props.onClick()
     await settle()
@@ -394,11 +422,10 @@ export async function runClientBundleCheck() {
     const button = findRow(link, '__dh_link')
     button.props.onClick()
     await settle()
-    await new Promise((resolve) => setTimeout(resolve, 700))
+    await new Promise((resolve) => setTimeout(resolve, 1600))
     await settle()
     const shortcut = document.dispatched.find((event) => event.code === 'Comma')
-    if (!shortcut) throw new Error('settings shortcut was not dispatched')
-    if (shortcut.ctrlKey !== true) throw new Error('shortcut must carry the primary modifier')
+    if (!shortcut) throw new Error('the settings shortcut was never tried')
     const rendered = text(renderOverlay()).join(' ')
     for (const needle of ['events', 'agent/pre-step', 'agent/turn-stopping']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
@@ -430,6 +457,19 @@ export async function runClientBundleCheck() {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
     return 'modal'
+  })
+
+  await check('client/运行历史可以展开看钩子名与耗时', async () => {
+    const row = findRow(renderOverlay(), '__dh_historyRow')
+    if (!row) throw new Error('history row not rendered')
+    if (text(renderOverlay()).join(' ').includes('runTiming')) throw new Error('details must stay collapsed')
+    row.props.onClick()
+    await settle()
+    const rendered = text(renderOverlay()).join(' ')
+    for (const needle of ['runHook', 'runTiming', 'ms']) {
+      if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
+    }
+    return 'expanded'
   })
 
   await tick()

@@ -94,15 +94,18 @@ window.__ModuleLoader__.load({
       pendingTitle: '{count} hook(s) need review',
       hookStats: 'Hook stats',
       runHistory: 'Run history',
+      runHook: 'Hook',
+      runTiming: 'Took',
+      runReason: 'Reason',
     }
 
     const zh = {
       meta: {
-        title: 'Hooks',
+        title: '钩子',
         description: '管理来自配置、插件与项目的生命周期钩子。',
       },
-      nav: 'Hooks',
-      title: 'Hooks',
+      nav: '钩子',
+      title: '钩子',
       subtitle: '管理来自配置与插件的生命周期钩子。',
       loading: '正在加载钩子…',
       empty: '没有找到钩子。',
@@ -170,6 +173,9 @@ window.__ModuleLoader__.load({
       pendingTitle: '有 {count} 个钩子需要审核',
       hookStats: '钩子统计',
       runHistory: '运行历史',
+      runHook: '钩子',
+      runTiming: '耗时',
+      runReason: '原因',
     }
 
     const STYLE = [
@@ -250,9 +256,12 @@ window.__ModuleLoader__.load({
       '.__dh_statRow{display:flex;align-items:center;justify-content:space-between;padding:2px 0;color:var(--dsw-alias-label-secondary,#4b5563)}',
       '.__dh_modalSection{margin-top:12px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
       '.__dh_history{display:flex;flex-direction:column;margin-top:4px}',
-      '.__dh_historyRow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563)}',
+      '.__dh_historyItem{display:flex;flex-direction:column}',
+      '.__dh_historyRow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563);background:none;border:0;text-align:left;cursor:pointer;font-family:inherit}',
       '.__dh_historyChevron{color:var(--dsw-alias-label-tertiary,#6b7280)}',
       '.__dh_historyStatus{color:var(--dsw-alias-label-primary,#1f2328)}',
+      '.__dh_historyTime{margin-left:auto;color:var(--dsw-alias-label-tertiary,#6b7280);font-variant-numeric:tabular-nums}',
+      '.__dh_historyMeta{display:flex;flex-direction:column;gap:2px;margin:0 0 4px 18px;padding:6px 8px;border-radius:6px;background:var(--dsw-alias-bg-layer-1,#f6f7f9);font-size:11px;color:var(--dsw-alias-label-secondary,#4b5563);word-break:break-all}',
     ].join('')
 
     /* ---------------- connection plumbing ---------------- */
@@ -304,6 +313,12 @@ window.__ModuleLoader__.load({
       return String(template).replace(/\{(\w+)\}/g, (match, name) =>
         values && name in values ? String(values[name]) : match,
       )
+    }
+
+    function clockTime(iso) {
+      const date = iso ? new Date(iso) : null
+      if (!date || Number.isNaN(date.getTime())) return ''
+      return date.toLocaleTimeString(undefined, { hour12: false })
     }
 
     function basename(command) {
@@ -613,56 +628,66 @@ window.__ModuleLoader__.load({
     }
 
     // dsh publishes no API for a plugin to open a settings section, so this drives
-    // the same path a user does: click the nav entry if settings is already open,
-    // otherwise fire the settings shortcut and look for it on the next ticks.
-    // If neither lands, our own panel opens so the click is never a dead end.
+    // the same path a user does: click our nav entry when settings is already open,
+    // otherwise click the settings trigger (it is the only button carrying
+    // aria-haspopup="dialog" + aria-keyshortcuts) and then click the nav entry.
+    // The keyboard shortcut is only a last resort, and our own panel catches the
+    // click when none of that lands.
     function openSettingsSection() {
       closeOverlay()
       const label = translate('nav')
-      const findCell = () => {
-        if (typeof document.querySelectorAll !== 'function') return null
-        return (
-          Array.from(document.querySelectorAll('[class*="_navLabel"]')).find(
-            (node) => node.textContent?.trim() === label,
-          ) ?? null
-        )
+      const query = (selector) => {
+        if (typeof document.querySelectorAll !== 'function') return []
+        return Array.from(document.querySelectorAll(selector))
       }
-      const openCell = () => {
+      const findCell = () =>
+        query('[class*="_navLabel"]').find((node) => node.textContent?.trim() === label) ?? null
+      const clickCell = () => {
         const cell = findCell()
         if (!cell) return false
         ;(cell.closest('button') ?? cell).click()
         return true
       }
-      const press = (altKey) => {
-        const event = new KeyboardEvent('keydown', {
-          key: ',',
-          code: 'Comma',
-          ctrlKey: true,
-          altKey,
-          bubbles: true,
-          cancelable: true,
-        })
-        document.dispatchEvent(event)
+      const openSettings = () => {
+        const trigger =
+          query('button[aria-haspopup="dialog"][aria-keyshortcuts]')[0] ??
+          query('button[aria-haspopup="dialog"]').find((node) =>
+            /设置|settings/i.test(node.getAttribute('aria-label') ?? ''),
+          ) ??
+          null
+        if (!trigger) return false
+        trigger.click()
+        return true
       }
-      if (openCell()) return
+      if (clickCell()) return
       let attempts = 0
       const timer = setInterval(() => {
         attempts += 1
-        if (openCell()) {
+        if (clickCell()) {
           clearInterval(timer)
           return
         }
-        if (attempts === 2) press(true)
-        if (attempts >= 8) {
+        if (attempts === 3 && !openSettings()) {
+          const event = new KeyboardEvent('keydown', {
+            key: ',',
+            code: 'Comma',
+            ctrlKey: true,
+            altKey: true,
+            bubbles: true,
+            cancelable: true,
+          })
+          const target =
+            [document.activeElement, document.body, document].find(
+              (node) => typeof node?.dispatchEvent === 'function',
+            ) ?? document
+          target.dispatchEvent(event)
+        }
+        if (attempts >= 16) {
           clearInterval(timer)
           openBrowser()
         }
-      }, 70)
-      if (typeof KeyboardEvent === 'function') press(false)
-      else {
-        clearInterval(timer)
-        openBrowser()
-      }
+      }, 75)
+      openSettings()
     }
 
     // Hooks and their trust state live on the host, so every panel that changes them
@@ -1190,6 +1215,7 @@ window.__ModuleLoader__.load({
       const conn = useConnection()
       const [stats, setStats] = React.useState(null)
       const [error, setError] = React.useState(null)
+      const [openRun, setOpenRun] = React.useState(null)
       const dialogRef = React.useRef(null)
 
       const refresh = React.useCallback(async () => {
@@ -1226,8 +1252,7 @@ window.__ModuleLoader__.load({
       }, [])
 
       const history = stats?.history ?? []
-      return createPortal(
-        h(
+      return createPortal(        h(
           'div',
           {
             className: '__dh_modal __dh_dlgCenter',
@@ -1276,16 +1301,38 @@ window.__ModuleLoader__.load({
             : h(
                 'div',
                 { className: '__dh_history' },
-                history.map((row, index) =>
-                  h(
+                history.map((row, index) => {
+                  const expanded = openRun === index
+                  return h(
                     'div',
-                    { key: `${row.at}-${index}`, className: '__dh_historyRow' },
-                    h('span', { className: '__dh_historyChevron' }, '>'),
-                    h('span', { className: '__dh_historyStatus' }, t(STATUS_KEY[row.status] ?? 'statusOk')),
-                    h('span', { className: '__dh_event' }, row.eventName),
-                    h('span', { className: '__dh_name' }, row.sourceLabel || row.source || ''),
-                  ),
-                ),
+                    { key: `${row.at}-${index}`, className: '__dh_historyItem' },
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: '__dh_historyRow',
+                        'aria-expanded': expanded,
+                        onClick: () => setOpenRun(expanded ? null : index),
+                      },
+                      h('span', { className: '__dh_historyChevron' }, expanded ? 'v' : '>'),
+                      h('span', { className: '__dh_historyStatus' }, t(STATUS_KEY[row.status] ?? 'statusOk')),
+                      h('span', { className: '__dh_event' }, row.eventName),
+                      h('span', { className: '__dh_name' }, row.sourceLabel || row.source || ''),
+                      h('span', { className: '__dh_historyTime' }, clockTime(row.at)),
+                    ),
+                    expanded
+                      ? h(
+                          'div',
+                          { className: '__dh_historyMeta' },
+                          h('div', null, `${t('runHook')}: ${row.title}`),
+                          h('div', null, `${t('runTiming')}: ${row.durationMs} ms`),
+                          row.reason || row.error
+                            ? h('div', null, `${t('runReason')}: ${row.reason ?? row.error}`)
+                            : null,
+                        )
+                      : null,
+                  )
+                }),
               ),
         ),
         document.body,
