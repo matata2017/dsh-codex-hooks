@@ -207,7 +207,6 @@ export async function runClientBundleCheck() {
     addEventListener() {},
     removeEventListener() {},
     navCells: [],
-    dispatched: [],
     triggers: [],
     querySelectorAll: (selector) => {
       if (selector.includes('_navLabel')) return document.navCells
@@ -377,6 +376,7 @@ export async function runClientBundleCheck() {
   })
 
   await check('client/提示里的「设置」链接：设置已开时点中自己的导航项', async () => {
+    document.triggers = []
     let clicked = 0
     document.navCells = [{ textContent: 'nav', closest: () => ({ click: () => (clicked += 1) }) }]
     const link = findByText(renderOverlay(), 'settingsLink')
@@ -387,20 +387,17 @@ export async function runClientBundleCheck() {
     await settle()
     document.navCells = []
     if (clicked !== 1) throw new Error(`nav entry not clicked: ${clicked}`)
-    if (document.dispatched.length !== 0) throw new Error('should not need the shortcut when settings is open')
     if (text(renderOverlay()).length !== 0) throw new Error('the dialog must close')
     return 'nav'
   })
 
   await check('client/提示里的「设置」链接：设置没开时点开设置再点自己的导航项', async () => {
-    document.dispatched = []
     let triggerClicks = 0
     document.triggers = [{ click: () => (triggerClicks += 1) }]
     findRow(renderTrigger(), '__dh_trigger').props.onClick()
     await settle()
     const link = findByText(renderOverlay(), 'settingsLink')
-    const button = findRow(link, '__dh_link')
-    button.props.onClick()
+    findRow(link, '__dh_link').props.onClick()
     await settle()
     if (triggerClicks !== 1) throw new Error(`settings trigger not clicked: ${triggerClicks}`)
     let navClicks = 0
@@ -409,28 +406,23 @@ export async function runClientBundleCheck() {
     document.navCells = []
     document.triggers = []
     if (navClicks !== 1) throw new Error(`nav entry not clicked: ${navClicks}`)
-    if (document.dispatched.length !== 0) throw new Error('the shortcut is only a last resort')
     if (text(renderOverlay()).length !== 0) throw new Error('our panel must stay closed')
     return 'settings'
   })
 
-  await check('client/提示里的「设置」链接：接不住时回退到钩子浏览器', async () => {
-    document.dispatched = []
+  await check('client/提示里的「设置」链接：找不到设置按钮时回退到钩子浏览器', async () => {
+    document.triggers = []
     findRow(renderTrigger(), '__dh_trigger').props.onClick()
     await settle()
     const link = findByText(renderOverlay(), 'settingsLink')
-    const button = findRow(link, '__dh_link')
-    button.props.onClick()
+    findRow(link, '__dh_link').props.onClick()
     await settle()
-    await new Promise((resolve) => setTimeout(resolve, 1600))
-    await settle()
-    const shortcut = document.dispatched.find((event) => event.code === 'Comma')
-    if (!shortcut) throw new Error('the settings shortcut was never tried')
     const rendered = text(renderOverlay()).join(' ')
     for (const needle of ['events', 'agent/pre-step', 'agent/turn-stopping']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
     if (rendered.includes('recentRuns')) throw new Error('the panels must not show the run log')
+    if (!rendered.includes('diag')) throw new Error('the fallback must say why: ' + rendered)
     return 'events'
   })
 

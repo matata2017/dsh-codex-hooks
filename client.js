@@ -627,12 +627,25 @@ window.__ModuleLoader__.load({
       setUi({ view: null, eventName: null, stats: false })
     }
 
-    // dsh publishes no API for a plugin to open a settings section, so this drives
-    // the same path a user does: click our nav entry when settings is already open,
-    // otherwise click the settings trigger (it is the only button carrying
-    // aria-haspopup="dialog" + aria-keyshortcuts) and then click the nav entry.
-    // The keyboard shortcut is only a last resort, and our own panel catches the
-    // click when none of that lands.
+    // dsh renders its settings panel itself and publishes no API that opens a section,
+    // so this drives the same two clicks a user makes: the sidebar settings trigger
+    // (class triggerRow, or the button advertising aria-haspopup="dialog"), then our
+    // own nav entry inside the panel. If either click is not found, our hooks panel
+    // opens instead of the click doing nothing.
+    // Why the settings jump fell back. Temporary: it is what we ask the user to
+    // screenshot when the click lands on our own panel.
+    function domReport() {
+      if (typeof document.querySelectorAll !== 'function') return 'diag: no querySelectorAll'
+      const count = (selector) => document.querySelectorAll(selector).length
+      return [
+        'diag',
+        'triggerRow=' + count('[class*="triggerRow"]'),
+        'haspopup=' + count('button[aria-haspopup="dialog"]'),
+        'navCell=' + count('[class*="_navCell"]'),
+        'navLabel=' + count('[class*="_navLabel"]'),
+      ].join(' ')
+    }
+
     function openSettingsSection() {
       closeOverlay()
       const label = translate('nav')
@@ -650,44 +663,28 @@ window.__ModuleLoader__.load({
       }
       const openSettings = () => {
         const trigger =
+          query('[class*="triggerRow"] button')[0] ??
           query('button[aria-haspopup="dialog"][aria-keyshortcuts]')[0] ??
-          query('button[aria-haspopup="dialog"]').find((node) =>
-            /设置|settings/i.test(node.getAttribute('aria-label') ?? ''),
-          ) ??
+          query('button[aria-haspopup="dialog"]')[0] ??
           null
         if (!trigger) return false
         trigger.click()
         return true
       }
       if (clickCell()) return
+      if (!openSettings()) {
+        setUi({ view: 'browser', eventName: null, stats: false, diag: domReport() })
+        return
+      }
       let attempts = 0
       const timer = setInterval(() => {
         attempts += 1
-        if (clickCell()) {
+        if (clickCell()) clearInterval(timer)
+        else if (attempts >= 6) {
           clearInterval(timer)
-          return
+          setUi({ view: 'browser', eventName: null, stats: false, diag: domReport() })
         }
-        if (attempts === 3 && !openSettings()) {
-          const event = new KeyboardEvent('keydown', {
-            key: ',',
-            code: 'Comma',
-            ctrlKey: true,
-            altKey: true,
-            bubbles: true,
-            cancelable: true,
-          })
-          const target =
-            [document.activeElement, document.body, document].find(
-              (node) => typeof node?.dispatchEvent === 'function',
-            ) ?? document
-          target.dispatchEvent(event)
-        }
-        if (attempts >= 16) {
-          clearInterval(timer)
-          openBrowser()
-        }
-      }, 75)
-      openSettings()
+      }, 60)
     }
 
     // Hooks and their trust state live on the host, so every panel that changes them
@@ -1110,6 +1107,7 @@ window.__ModuleLoader__.load({
             ),
           ),
           error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
+          view.diag ? h('div', { className: '__dh_status' }, view.diag) : null,
           view.eventName
             ? h(
                 'div',
