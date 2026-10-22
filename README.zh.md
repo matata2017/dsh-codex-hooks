@@ -91,6 +91,15 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 - `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **14 passed, 0 failed**。
 - `agent/pre-step` 在真实 dsh 会话里跑通：每提交一次提示，示例钩子打印一行 `echo-hook received event=…`。
 
+## 这里做不到的事
+
+下面几条是 dsh 的边界，不是我们没写：需要一个宿主没开放的接缝。
+
+- **上下文只能以 user 角色注入**：`agent/pre-step` 收的是 `UserMessage[]`，也没有对外的「追加 developer 消息」接口，所以 `additionalContext` 拿不到 developer 消息那种分量。
+- **改不了工具入参**：`tools/pre-execute` 只能 allow / deny / ask / cancel，dsh 明确排除入参改写（参数已经记日志并展示给用户）。
+- **压缩、中断、模型请求这三类事件没有接缝**，最接近「压缩后」的只有 `agent/created` 的 `source: "compact"`。
+- **`mcp_tool`、`prompt`、`agent` 处理器可以审查但不会执行**，所以它们永远不会显示为生效。
+
 ## 安全
 
 钩子以 dsh 进程的权限执行真实命令。所以信任钉在每条钩子的 sha256 指纹上：批准一条钩子＝批准这一行具体的命令，任何改动都要重新批准。只启用你读过的钩子。

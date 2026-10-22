@@ -91,6 +91,15 @@ Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `age
 - `node selftest/host-e2e.mjs` → **14 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 
+## What a hook cannot do here
+
+These are dsh boundaries, not missing code: they need a seam the harness does not expose.
+
+- **Context is user-role only.** `agent/pre-step` takes `UserMessage[]`, and no public API appends a developer message, so `additionalContext` cannot arrive with the extra weight a developer message would carry.
+- **Tool arguments cannot be rewritten.** `tools/pre-execute` returns allow / deny / ask / cancel; dsh deliberately excludes input rewriting because arguments are already logged and presented.
+- **No seam for compaction, interrupt, or model-request events.** `agent/created` with `source: "compact"` is the closest thing to a post-compaction hook.
+- **`mcp_tool`, `prompt`, `agent` handlers are reviewable but not executed**, so they never show as active.
+
 ## Security
 
 Hooks execute real commands with the permissions of the dsh process. That is why trust is pinned to the sha256 fingerprint of each hook: approving a hook approves exactly that command line, and any edit requires a new approval. Only enable hooks you have read.
