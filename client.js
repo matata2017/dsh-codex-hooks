@@ -95,6 +95,7 @@ window.__ModuleLoader__.load({
       runHook: 'Hook',
       runTiming: 'Took',
       runReason: 'Reason',
+      skippedHint: '{count} hook(s) are still untrusted, so they have not run yet.',
     }
 
     const zh = {
@@ -172,6 +173,7 @@ window.__ModuleLoader__.load({
       runHook: '钩子',
       runTiming: '耗时',
       runReason: '原因',
+      skippedHint: '还有 {count} 个钩子未信任，因此没有运行。',
     }
 
     const STYLE = [
@@ -610,18 +612,13 @@ window.__ModuleLoader__.load({
     }
 
     function openStats() {
-      setUi({ stats: true })
+      setUi({ view: null, eventName: null, stats: true })
     }
 
     function closeOverlay() {
       setUi({ view: null, eventName: null, stats: false })
     }
 
-    // dsh renders its settings panel itself and publishes no API that opens a section,
-    // so this drives the same two clicks a user makes: the sidebar settings trigger
-    // (class triggerRow, or the button advertising aria-haspopup="dialog"), then our
-    // own nav entry inside the panel. If either click is not found, our hooks panel
-    // opens instead of the click doing nothing.
     // Hooks and their trust state live on the host, so every panel that changes them
     // pings this counter and the settings section refreshes itself.
     let revision = 0
@@ -1212,6 +1209,13 @@ window.__ModuleLoader__.load({
           ),
           error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
           h('div', { className: '__dh_modalSection' }, t('runHistory')),
+          stats?.needsReview > 0
+            ? h(
+                'div',
+                { className: '__dh_dlgNote' },
+                t('skippedHint', { count: stats.needsReview }),
+              )
+            : null,
           history.length === 0
             ? h('div', { className: '__dh_empty' }, t('noRuns'))
             : h(
@@ -1233,7 +1237,7 @@ window.__ModuleLoader__.load({
                       h('span', { className: '__dh_historyChevron' }, expanded ? 'v' : '>'),
                       h('span', { className: '__dh_historyStatus' }, t(STATUS_KEY[row.status] ?? 'statusOk')),
                       h('span', { className: '__dh_event' }, row.eventName),
-                      h('span', { className: '__dh_name' }, row.sourceLabel || row.source || ''),
+                      h('span', { className: '__dh_name' }, row.groupLabel || row.sourceLabel || row.source || ''),
                       h('span', { className: '__dh_historyTime' }, clockTime(row.at)),
                     ),
                     expanded
@@ -1241,6 +1245,7 @@ window.__ModuleLoader__.load({
                           'div',
                           { className: '__dh_historyMeta' },
                           h('div', null, `${t('runHook')}: ${row.title}`),
+                          row.path ? h('div', null, `${t('sourceLabel')}: ${row.path}`) : null,
                           h('div', null, `${t('runTiming')}: ${row.durationMs} ms`),
                           row.reason || row.error
                             ? h('div', null, `${t('runReason')}: ${row.reason ?? row.error}`)

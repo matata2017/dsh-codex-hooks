@@ -54,11 +54,23 @@ FAKE_DATA.groups = [
   { id: 'config', label: 'From Config', count: FAKE_DATA.hooks.length, hooks: FAKE_DATA.hooks },
 ]
 
-const FAKE_STATS = {  runs: 2,
+const FAKE_STATS = {
+  runs: 2,
   blocked: 1,
   failed: 0,
+  needsReview: 1,
   history: [
-    { at: 'now', eventName: 'agent/pre-step', title: 'echo-hook', sourceLabel: 'hooks.json', status: 'blocked', durationMs: 12 },
+    {
+      at: 'now',
+      eventName: 'agent/pre-step',
+      title: 'echo-hook',
+      source: 'config',
+      groupLabel: 'From Config',
+      sourceLabel: 'hooks.json',
+      path: 'C:/Users/x/.dsh/hooks.json',
+      status: 'blocked',
+      durationMs: 12,
+    },
   ],
 }
 
@@ -396,9 +408,22 @@ export async function runClientBundleCheck() {
     button.props.onClick()
     await settle()
     const rendered = text(renderOverlay()).join(' ')
-    for (const needle of ['hookStats', 'runs', 'blocked', 'failed', 'runHistory', 'agent/pre-step']) {
+    for (const needle of [
+      'hookStats',
+      'runs',
+      'blocked',
+      'failed',
+      'runHistory',
+      'agent/pre-step',
+      'From Config',
+      'skippedHint',
+    ]) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
+    const sourceCell = findRow(renderOverlay(), '__dh_name')
+    if (!sourceCell) throw new Error('history row has no source cell')
+    const sourceText = text(sourceCell).join(' ').trim()
+    if (sourceText !== 'From Config') throw new Error(`history row must show the group, got "${sourceText}"`)
     return 'modal'
   })
 
@@ -409,7 +434,7 @@ export async function runClientBundleCheck() {
     row.props.onClick()
     await settle()
     const rendered = text(renderOverlay()).join(' ')
-    for (const needle of ['runHook', 'runTiming', 'ms']) {
+    for (const needle of ['runHook', 'runTiming', 'ms', 'sourceLabel', 'C:/Users/x/.dsh/hooks.json']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
     return 'expanded'
