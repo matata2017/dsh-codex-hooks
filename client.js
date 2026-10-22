@@ -70,9 +70,7 @@ window.__ModuleLoader__.load({
       reviewTitle: 'Review hooks',
       reviewCount: '{count} hook(s) are new or changed.',
       reviewNote: 'Trusted hooks can run commands on your machine.',
-      reviewNoteBefore: 'You can change this later in ',
-      reviewNoteAfter: '',
-      settingsLink: 'settings',
+      reviewNoteWhere: 'You can change this later in Settings, under Hooks.',
       hookSettings: 'Hook settings',
       noPending: 'No hook is waiting for review.',
       details: 'Show details',
@@ -149,9 +147,7 @@ window.__ModuleLoader__.load({
       reviewTitle: '审查钩子',
       reviewCount: '{count} 个钩子是新的或已被修改。',
       reviewNote: '信任后钩子可以在你的机器上执行命令。',
-      reviewNoteBefore: '你可以稍后在',
-      reviewNoteAfter: '中更改此选项',
-      settingsLink: '设置',
+      reviewNoteWhere: '你可以稍后在 设置 → 钩子 里更改此选项。',
       hookSettings: '钩子设置',
       noPending: '没有待审核的钩子。',
       details: '查看详情',
@@ -238,7 +234,6 @@ window.__ModuleLoader__.load({
       '.__dh_metaKey{width:84px;flex:none;color:var(--dsw-alias-label-tertiary,#6b7280)}',
       '.__dh_metaValue{flex:1;min-width:0;word-break:break-all;font-size:11px}',
       '.__dh_dlgNote{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
-      '.__dh_link{border:none;background:none;padding:0;font:inherit;color:var(--dsw-alias-state-business-primary,#3964fe);cursor:pointer;text-decoration:underline}',
       '.__dh_dlgActions{display:flex;justify-content:flex-end;gap:8px;margin-top:2px}',
       '.__dh_pendingRow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb);font-size:12px}',
       '.__dh_pendingRow:last-child{border-bottom:none}',
@@ -632,61 +627,6 @@ window.__ModuleLoader__.load({
     // (class triggerRow, or the button advertising aria-haspopup="dialog"), then our
     // own nav entry inside the panel. If either click is not found, our hooks panel
     // opens instead of the click doing nothing.
-    // Why the settings jump fell back. Temporary: it is what we ask the user to
-    // screenshot when the click lands on our own panel.
-    function domReport() {
-      if (typeof document.querySelectorAll !== 'function') return 'diag: no querySelectorAll'
-      const count = (selector) => document.querySelectorAll(selector).length
-      return [
-        'diag',
-        'triggerRow=' + count('[class*="triggerRow"]'),
-        'haspopup=' + count('button[aria-haspopup="dialog"]'),
-        'navCell=' + count('[class*="_navCell"]'),
-        'navLabel=' + count('[class*="_navLabel"]'),
-      ].join(' ')
-    }
-
-    function openSettingsSection() {
-      closeOverlay()
-      const label = translate('nav')
-      const query = (selector) => {
-        if (typeof document.querySelectorAll !== 'function') return []
-        return Array.from(document.querySelectorAll(selector))
-      }
-      const findCell = () =>
-        query('[class*="_navLabel"]').find((node) => node.textContent?.trim() === label) ?? null
-      const clickCell = () => {
-        const cell = findCell()
-        if (!cell) return false
-        ;(cell.closest('button') ?? cell).click()
-        return true
-      }
-      const openSettings = () => {
-        const trigger =
-          query('[class*="triggerRow"] button')[0] ??
-          query('button[aria-haspopup="dialog"][aria-keyshortcuts]')[0] ??
-          query('button[aria-haspopup="dialog"]')[0] ??
-          null
-        if (!trigger) return false
-        trigger.click()
-        return true
-      }
-      if (clickCell()) return
-      if (!openSettings()) {
-        setUi({ view: 'browser', eventName: null, stats: false, diag: domReport() })
-        return
-      }
-      let attempts = 0
-      const timer = setInterval(() => {
-        attempts += 1
-        if (clickCell()) clearInterval(timer)
-        else if (attempts >= 6) {
-          clearInterval(timer)
-          setUi({ view: 'browser', eventName: null, stats: false, diag: domReport() })
-        }
-      }, 60)
-    }
-
     // Hooks and their trust state live on the host, so every panel that changes them
     // pings this counter and the settings section refreshes itself.
     let revision = 0
@@ -961,23 +901,7 @@ window.__ModuleLoader__.load({
                   ),
                 ),
           ),
-          h(
-            'div',
-            { className: '__dh_dlgNote' },
-            t('reviewNoteBefore'),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: '__dh_link',
-                onClick: () => {
-                  openSettingsSection()
-                },
-              },
-              t('settingsLink'),
-            ),
-            t('reviewNoteAfter'),
-          ),
+          h('div', { className: '__dh_dlgNote' }, t('reviewNoteWhere')),
           h(
             'div',
             { className: '__dh_dlgActions' },
@@ -1107,7 +1031,6 @@ window.__ModuleLoader__.load({
             ),
           ),
           error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
-          view.diag ? h('div', { className: '__dh_status' }, view.diag) : null,
           view.eventName
             ? h(
                 'div',

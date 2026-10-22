@@ -35,7 +35,7 @@ Default timeout is 600s, except `session/disposed` (1s default, 3s maximum) so s
 
 ## Review, run history and `/hooks`
 
-- **Hook button in the composer** — a hook icon sits in the composer's tool row (next to the permission and agent controls), with a small red dot while hooks still need review (no number — a count goes stale as soon as a hook is trusted elsewhere); clicking it opens the **Review hooks** dialog: one row per hook with a checkbox, the hook name, a *New* badge and a chevron that expands *Source / Hook type / Command / Timeout*, then the hint "You can change this later in settings" — *settings* really goes to **Settings → Hooks** (click the settings trigger, then our nav entry; only when neither lands does the plugin's own hooks panel open) — and the three choices *Not now / Allow all / Allow selected*. Approving pins the current fingerprints in `$DSH_HOME/hooks.state.json`; everything else is handled later in **Settings → Hooks**, one hook at a time.
+- **Hook button in the composer** — a hook icon sits in the composer's tool row (next to the permission and agent controls), with a small red dot while hooks still need review (no number — a count goes stale as soon as a hook is trusted elsewhere); clicking it opens the **Review hooks** dialog: one row per hook with a checkbox, the hook name, a *New* badge and a chevron that expands *Source / Hook type / Command / Timeout*, then the hint "You can change this later in Settings, under Hooks" (plain text: dsh exposes no API for a plugin to open a settings section, so it does not pretend to jump) and the three choices *Not now / Allow all / Allow selected*. Approving pins the current fingerprints in `$DSH_HOME/hooks.state.json`; everything else is handled later in **Settings → Hooks**, one hook at a time.
 - **`/hooks` opens the hooks browser** — the first page lists the events with `active/installed` and a `!` marker on the events that need review, the second page lists the handlers of one event with their trust state, an on/off switch and a *Trust* / *Revoke* button. It is a normal dsh slash command (registered when the host composes the `commands` service), so it never reaches the model.
 - **Hook stats in the message action row** — the assistant message action row carries a hook icon; clicking it opens a **Hook stats** dialog with `Runs / Blocked / Failed` for the last 200 executions and a *Run history* list (`Completed  agent/pre-step  User`). Hook output is *not* printed into the conversation; the model only ever sees a handler's `additionalContext`. The run log lives in memory for the session and is not written to disk.
 - **Floating panels** — every panel is rendered through a portal on `document.body` with a fixed position, so it is never clipped by the composer or the message column.
@@ -87,7 +87,7 @@ Handler types: `command`, `mcp_tool` (both executable), `prompt`, `agent` (parse
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **86 passed, 0 failed, 0 skipped**.
+- `node test/run-tests.mjs` → **83 passed, 0 failed, 0 skipped**.
 - `node selftest/host-e2e.mjs` → **14 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 

@@ -357,7 +357,7 @@ export async function runClientBundleCheck() {
     button.props.onClick()
     await settle()
     const rendered = text(renderOverlay()).join(' ')
-    for (const needle of ['reviewTitle', 'echo-hook', 'newBadge', 'notNow', 'allowAll', 'allowSelected', 'settingsLink']) {
+    for (const needle of ['reviewTitle', 'echo-hook', 'newBadge', 'notNow', 'allowAll', 'allowSelected', 'reviewNoteWhere']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
     return 'review'
@@ -375,58 +375,9 @@ export async function runClientBundleCheck() {
     return 'details'
   })
 
-  await check('client/提示里的「设置」链接：设置已开时点中自己的导航项', async () => {
-    document.triggers = []
-    let clicked = 0
-    document.navCells = [{ textContent: 'nav', closest: () => ({ click: () => (clicked += 1) }) }]
-    const link = findByText(renderOverlay(), 'settingsLink')
-    if (!link) throw new Error('settings link not found')
-    const button = findRow(link, '__dh_link')
-    if (!button) throw new Error('settings link is not a button')
-    button.props.onClick()
-    await settle()
-    document.navCells = []
-    if (clicked !== 1) throw new Error(`nav entry not clicked: ${clicked}`)
-    if (text(renderOverlay()).length !== 0) throw new Error('the dialog must close')
-    return 'nav'
-  })
-
-  await check('client/提示里的「设置」链接：设置没开时点开设置再点自己的导航项', async () => {
-    let triggerClicks = 0
-    document.triggers = [{ click: () => (triggerClicks += 1) }]
-    findRow(renderTrigger(), '__dh_trigger').props.onClick()
-    await settle()
-    const link = findByText(renderOverlay(), 'settingsLink')
-    findRow(link, '__dh_link').props.onClick()
-    await settle()
-    if (triggerClicks !== 1) throw new Error(`settings trigger not clicked: ${triggerClicks}`)
-    let navClicks = 0
-    document.navCells = [{ textContent: 'nav', closest: () => ({ click: () => (navClicks += 1) }) }]
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    document.navCells = []
-    document.triggers = []
-    if (navClicks !== 1) throw new Error(`nav entry not clicked: ${navClicks}`)
-    if (text(renderOverlay()).length !== 0) throw new Error('our panel must stay closed')
-    return 'settings'
-  })
-
-  await check('client/提示里的「设置」链接：找不到设置按钮时回退到钩子浏览器', async () => {
-    document.triggers = []
-    findRow(renderTrigger(), '__dh_trigger').props.onClick()
-    await settle()
-    const link = findByText(renderOverlay(), 'settingsLink')
-    findRow(link, '__dh_link').props.onClick()
-    await settle()
-    const rendered = text(renderOverlay()).join(' ')
-    for (const needle of ['events', 'agent/pre-step', 'agent/turn-stopping']) {
-      if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
-    }
-    if (rendered.includes('recentRuns')) throw new Error('the panels must not show the run log')
-    if (!rendered.includes('diag')) throw new Error('the fallback must say why: ' + rendered)
-    return 'events'
-  })
-
   await check('client/点事件行进入处理器列表', async () => {
+    decorations[0].ui.run()
+    await settle()
     const row = findRow(renderOverlay(), '__dh_listRowPick')
     if (!row) throw new Error('event row not found')
     row.props.onClick()
