@@ -38,9 +38,10 @@ Codex 的 14 个事件对应到 dsh 自己的运行时事件：
 
 ## 审核、运行记录与 `/hooks`
 
-- **输入框工具栏的钩子图标** — 输入框工具栏（权限/专家控件旁边）有一个钩子图标，角标数字是待审核的 hook 数量；点它会在输入框上方弹出浮层，里面是待审核列表和事件浏览器。审核就在这个浮层里做：每个待审核 hook 有自己的*信任*按钮，另外还有*全部信任并继续*与*暂不信任（钩子不会运行）*——与 Codex 的三个选项一致。批准即把当前指纹钉进 `$DSH_HOME/hooks.state.json`；其余情况到 **设置 → Hooks** 里逐个处理。
+- **输入框工具栏的钩子图标** — 输入框工具栏（权限/专家控件旁边）有一个钩子图标，角标数字是待审核的 hook 数量；点它打开**审查钩子**弹窗，布局照 Codex：每条 hook 一行，带复选框、名称、*新建*徽标和 chevron，展开是*来源 / Hook 类型 / 命令 / 超时*；底部提示「你可以稍后在设置中更改此选项」，其中*设置*点开钩子浏览器；三个按钮是*以后再说 / 全部允许 / 允许所选项*。批准即把当前指纹钉进 `$DSH_HOME/hooks.state.json`；其余情况到 **设置 → Hooks** 里逐个处理。
+- **`/hooks` 打开钩子浏览器** — 在输入框敲 `/hooks` 打开两级视图，和 Codex 一致：第一页按事件列出 `生效/已安装` 计数，待审核的事件行尾带 `!`；第二页列出该事件的处理器，带信任状态、启用开关和*信任*/*撤销*按钮。它是标准的 dsh 斜杠命令（宿主组合了 `commands` 服务时注册），不会发给模型。
 - **消息操作行的钩子图标 → Hook stats 弹窗** — 助手消息的操作行有一个钩子图标，点开是 **Hook stats** 弹窗：最近 200 次执行的 `运行 / 拦截 / 失败` 计数，以及 *Run history* 列表（形如 `Completed  UserPromptSubmit  User`）。hook 的输出**不会**打印进对话，模型只会看到 handler 的 `additionalContext`。运行记录和 Codex 一样只放在内存里，不落盘。
-- **`/hooks` 打开同一个浮层** — 在输入框敲 `/hooks` 会在输入框上方打开两级视图，和 Codex 一致：第一页按事件列出 `生效/已安装` 计数，待审核的事件行尾带 `!`；第二页列出该事件的处理器，带信任状态、启用开关和*信任*/*撤销*按钮。它是标准的 dsh 斜杠命令（宿主组合了 `commands` 服务时注册），不会发给模型。
+- **浮动面板** — 所有面板都通过 portal 挂到 `document.body` 上并固定定位，因此不会被输入框或消息列裁切。
 
 ## 安装
 
@@ -85,7 +86,7 @@ handler 类型：`command`、`mcp_tool`（会执行）、`prompt`、`agent`（�
 
 ## 验证状态
 
-- `node test/run-tests.mjs` → **95 passed, 0 failed, 0 skipped**，其中 8 条指纹取自真实 Codex 安装（`test/vectors.json`）。
+- `node test/run-tests.mjs` → **96 passed, 0 failed, 0 skipped**，其中 8 条指纹取自真实 Codex 安装（`test/vectors.json`）。
 - `UserPromptSubmit` 在真实 dsh 会话里跑通：示例 hook 每次提交提示词会打印一行 `echo-hook received event=…`。
 - `selftest/host-e2e.mjs` 对着真实 profile 验证宿主侧。
 

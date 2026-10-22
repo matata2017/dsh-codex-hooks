@@ -40,9 +40,10 @@ Default timeout is 600s, except `SessionEnd` (1s default, 3s maximum) so shutdow
 
 ## Review, run history and `/hooks`
 
-- **Hook button in the composer** — a hook icon sits in the composer's tool row (next to the permission and agent controls). Its badge counts the hooks that still need review; clicking it opens a popup above the composer with the review list and the event browser. The popup is where you approve hooks: each hook that needs review gets its own *Trust* button, plus *Trust all and continue* and *Continue without trusting (hooks won't run)* — the same three choices as Codex. Approving pins the current fingerprints in `$DSH_HOME/hooks.state.json`; anything else is edited later in **Settings → Hooks**, where trust is granted one hook at a time.
-- **`/hooks` opens the same popup** — typing `/hooks` in the composer opens the two level view, exactly like Codex: the first page lists the hook events with `active/installed` and a `!` marker on the events that need review, the second page lists the handlers of one event with their trust state, an on/off switch and a *Trust* / *Revoke* button. It is a normal dsh slash command (registered when the host composes the `commands` service), so it never reaches the model.
-- **Hook stats in the message action row** — the assistant message action row carries a hook icon; clicking it opens a **Hook stats** modal with `Runs / Blocked / Failed` for the last 200 executions and a *Run history* list (`Completed  UserPromptSubmit  User`). Hook output is *not* printed into the conversation; the model only ever sees a handler's `additionalContext`. The run log lives in memory for the session, like Codex's, and is not written to disk.
+- **Hook button in the composer** — a hook icon sits in the composer's tool row (next to the permission and agent controls). Its badge counts the hooks that still need review; clicking it opens the **Review hooks** dialog, laid out like Codex's: one row per hook with a checkbox, the hook name, a *New* badge and a chevron that expands *Source / Hook type / Command / Timeout*, then the hint "You can change this later in settings" — *settings* opens the hooks browser — and the three choices *Not now / Allow all / Allow selected*. Approving pins the current fingerprints in `$DSH_HOME/hooks.state.json`; anything else is edited later in **Settings → Hooks**, where trust is granted one hook at a time.
+- **`/hooks` opens the hooks browser** — typing `/hooks` in the composer opens the two level view, exactly like Codex: the first page lists the hook events with `active/installed` and a `!` marker on the events that need review, the second page lists the handlers of one event with their trust state, an on/off switch and a *Trust* / *Revoke* button. It is a normal dsh slash command (registered when the host composes the `commands` service), so it never reaches the model.
+- **Hook stats in the message action row** — the assistant message action row carries a hook icon; clicking it opens a **Hook stats** dialog with `Runs / Blocked / Failed` for the last 200 executions and a *Run history* list (`Completed  UserPromptSubmit  User`). Hook output is *not* printed into the conversation; the model only ever sees a handler's `additionalContext`. The run log lives in memory for the session, like Codex's, and is not written to disk.
+- **Floating panels** — every panel is rendered through a portal on `document.body` with a fixed position, so it is never clipped by the composer or the message column.
 
 ## Install
 
@@ -87,7 +88,7 @@ Handler types: `command`, `mcp_tool` (both executable), `prompt`, `agent` (parse
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **95 passed, 0 failed, 0 skipped**, including 8 fingerprints captured from a real Codex installation (`test/vectors.json`).
+- `node test/run-tests.mjs` → **96 passed, 0 failed, 0 skipped**, including 8 fingerprints captured from a real Codex installation (`test/vectors.json`).
 - `UserPromptSubmit` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 - `selftest/host-e2e.mjs` exercises the host side against a real profile.
 

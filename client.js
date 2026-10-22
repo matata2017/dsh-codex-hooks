@@ -16,6 +16,7 @@ window.__ModuleLoader__.load({
   id: SELF_ID,
   factory: (require) => {
     const React = require('react')
+    const { createPortal } = require('react-dom')
     const h = React.createElement
     const NS = 'dsh-hooks'
 
@@ -60,14 +61,27 @@ window.__ModuleLoader__.load({
       reviewBanner: '{count} hook(s) need review before they can run.',
       notNow: 'Not now',
       allowAll: 'Allow all',
+      allowSelected: 'Allow selected',
       reviewSettingsHint: 'You can change this later in Settings → Hooks.',
       statusOk: 'Completed',
       statusBlocked: 'Blocked',
       statusFailed: 'Failed',
       statusSkipped: 'Skipped',
-      reviewTitle: 'Hooks need review',
+      reviewTitle: 'Review hooks',
       reviewCount: '{count} hook(s) are new or changed.',
       reviewNote: 'Trusted hooks can run commands on your machine.',
+      reviewNoteBefore: 'You can change this later in ',
+      reviewNoteAfter: '',
+      settingsLink: 'settings',
+      hookSettings: 'Hook settings',
+      noPending: 'No hook is waiting for review.',
+      details: 'Show details',
+      sourceLabel: 'Source',
+      typeLabel: 'Hook type',
+      commandLabel: 'Command',
+      timeoutLabel: 'Timeout',
+      milliseconds: '{value} ms',
+      newBadge: 'New',
       reviewHooks: 'Review hooks',
       trustAllContinue: 'Trust all and continue',
       continueWithout: "Continue without trusting (hooks won't run)",
@@ -123,14 +137,27 @@ window.__ModuleLoader__.load({
       reviewBanner: '有 {count} 个钩子需要审核才能运行。',
       notNow: '稍后',
       allowAll: '全部信任',
+      allowSelected: '允许所选项',
       reviewSettingsHint: '之后可在 设置 → Hooks 中修改。',
       statusOk: '已完成',
       statusBlocked: '被拦截',
       statusFailed: '失败',
       statusSkipped: '已跳过',
-      reviewTitle: '钩子需要审核',
+      reviewTitle: '审查钩子',
       reviewCount: '{count} 个钩子是新的或已被修改。',
       reviewNote: '信任后钩子可以在你的机器上执行命令。',
+      reviewNoteBefore: '你可以稍后在',
+      reviewNoteAfter: '中更改此选项',
+      settingsLink: '设置',
+      hookSettings: '钩子设置',
+      noPending: '没有待审核的钩子。',
+      details: '查看详情',
+      sourceLabel: '来源',
+      typeLabel: 'Hook 类型',
+      commandLabel: '命令',
+      timeoutLabel: '超时',
+      milliseconds: '{value}毫秒',
+      newBadge: '新建',
       reviewHooks: '查看钩子',
       trustAllContinue: '全部信任并继续',
       continueWithout: '暂不信任（钩子不会运行）',
@@ -197,7 +224,21 @@ window.__ModuleLoader__.load({
       '.__dh_trigger:hover{background:var(--dsw-alias-interactive-bg-hover,#f2f4f7)}',
       '.__dh_trigger[data-open="true"]{background:var(--dsw-alias-interactive-bg-hover,#f2f4f7);color:var(--dsw-alias-label-primary,#1f2328)}',
       '.__dh_triggerBadge{position:absolute;top:-3px;right:-3px;min-width:14px;height:14px;padding:0 3px;border-radius:999px;background:var(--dsw-alias-state-error-primary,#f85149);color:#fff;font-size:9px;line-height:14px;text-align:center;pointer-events:none}',
-      '.__dh_popup{position:absolute;bottom:calc(100% + 4px);left:0;right:0;z-index:100;box-sizing:border-box;max-height:min(60vh,520px);overflow:auto;border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:12px;background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1,#fff));box-shadow:var(--dsw-elevation-prominent);padding:10px 12px;display:flex;flex-direction:column;gap:10px;pointer-events:auto;text-align:left}',
+      '.__dh_dlg{position:fixed;z-index:1200;box-sizing:border-box;min-width:340px;max-width:min(440px,calc(100vw - 24px));max-height:min(72vh,560px);overflow:auto;border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:14px;background:var(--dsw-alias-bg-base,#fff);box-shadow:var(--dsw-elevation-prominent);padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-primary,#1f2328);text-align:left}',
+      '.__dh_dlgTitle{font-size:15px;font-weight:600}',
+      '.__dh_dlgBody{display:flex;flex-direction:column;gap:6px}',
+      '.__dh_hookRow{border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:10px;padding:8px 10px;background:var(--dsw-alias-bg-layer-1,#fff)}',
+      '.__dh_hookHead{display:flex;align-items:center;gap:8px}',
+      '.__dh_hookName{flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.__dh_badgeNew{background:var(--dsw-alias-state-business-primary,#3964fe);color:#fff;border-radius:999px;padding:0 8px;font-size:10px;line-height:16px}',
+      '.__dh_chevron{border:none;background:transparent;color:var(--dsw-alias-label-tertiary,#6b7280);cursor:pointer;font-size:12px;padding:0 2px}',
+      '.__dh_hookMeta{margin:8px 0 2px;padding:8px 10px;border-radius:8px;background:var(--dsw-alias-bg-layer-2,#f7f8fa);display:flex;flex-direction:column;gap:4px;font-size:12px}',
+      '.__dh_metaRow{display:flex;gap:10px}',
+      '.__dh_metaKey{width:84px;flex:none;color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_metaValue{flex:1;min-width:0;word-break:break-all;font-size:11px}',
+      '.__dh_dlgNote{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_link{border:none;background:none;padding:0;font:inherit;color:var(--dsw-alias-state-business-primary,#3964fe);cursor:pointer;text-decoration:underline}',
+      '.__dh_dlgActions{display:flex;justify-content:flex-end;gap:8px;margin-top:2px}',
       '.__dh_pendingRow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb);font-size:12px}',
       '.__dh_pendingRow:last-child{border-bottom:none}',
       '.__dh_actionBtn{width:28px;height:28px;border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary,#6b7280);cursor:pointer;background:0 0;border:none;justify-content:center;align-items:center;padding:6px;display:inline-flex}',
@@ -206,6 +247,7 @@ window.__ModuleLoader__.load({
       '.__dh_modalRoot{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center}',
       '.__dh_modalBackdrop{position:absolute;inset:0;background:rgba(0,0,0,.28)}',
       '.__dh_modal{position:relative;z-index:1;box-sizing:border-box;min-width:320px;max-width:min(520px,92vw);border-radius:14px;border:1px solid var(--dsw-alias-border-l2,#dce2eb);background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1,#fff));box-shadow:var(--dsw-elevation-prominent);padding:16px 18px;display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-primary,#1f2328)}',
+      '.__dh_dlgCenter{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1200;background:var(--dsw-alias-bg-base,#fff)}',
       '.__dh_modalHead{display:flex;align-items:center;gap:10px;margin-bottom:6px}',
       '.__dh_modalTitle{font-size:15px;font-weight:600;flex:1}',
       '.__dh_iconBtn{border:none;background:transparent;color:var(--dsw-alias-label-tertiary,#6b7280);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}',
@@ -517,39 +559,54 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /* ---------------- composer popup: review + hooks browser ---------------- */
+    /* ---------------- overlays: review dialog + hooks browser ---------------- */
 
-    // One popup above the composer holds both views. The composer tool row
-    // button opens it, and so does `/hooks`.
-    const panel = { open: false, eventName: null }
-    const panelListeners = new Set()
+    // Codex shows a review dialog when a hook needs a fingerprint, the hooks
+    // browser behind "/hooks", and the run counters behind the message action
+    // row. One overlay state drives all three.
+    const ui = { view: null, eventName: null, stats: false }
+    const uiListeners = new Set()
     const pendingState = { count: 0 }
     const pendingListeners = new Set()
     let triggerEl = null
 
-    function setPanel(next) {
-      Object.assign(panel, next)
-      for (const listener of panelListeners) listener()
+    function setUi(patch) {
+      let changed = false
+      for (const key of Object.keys(patch)) {
+        if (ui[key] !== patch[key]) {
+          ui[key] = patch[key]
+          changed = true
+        }
+      }
+      if (changed) for (const listener of uiListeners) listener()
     }
 
-    function openBrowser(eventName) {
-      setPanel({ open: true, eventName: eventName ?? null })
-    }
-
-    function closeBrowser() {
-      setPanel({ open: false, eventName: null })
-    }
-
-    function usePanel() {
+    function useUi() {
       const [, bump] = React.useState(0)
       React.useEffect(() => {
         const listener = () => bump((value) => value + 1)
-        panelListeners.add(listener)
+        uiListeners.add(listener)
         return () => {
-          panelListeners.delete(listener)
+          uiListeners.delete(listener)
         }
       }, [])
-      return panel
+      return ui
+    }
+
+    function openReview() {
+      setUi({ view: 'review', eventName: null, stats: false })
+    }
+
+    function openBrowser(eventName) {
+      setUi({ view: 'browser', eventName: eventName ?? null, stats: false })
+    }
+
+    function openStats() {
+      setUi({ stats: true })
+    }
+
+    function closeOverlay() {
+      setUi({ view: null, eventName: null, stats: false })
     }
 
     function setPendingCount(value) {
@@ -570,15 +627,318 @@ window.__ModuleLoader__.load({
       return pendingState.count
     }
 
-    function HooksPopup() {
+    // The panels float above the composer, so they track the trigger button.
+    function anchorStyle(width) {
+      const rect =
+        triggerEl && typeof triggerEl.getBoundingClientRect === 'function'
+          ? triggerEl.getBoundingClientRect()
+          : null
+      if (!rect || !rect.width) {
+        return { left: '50%', bottom: 96, transform: 'translateX(-50%)', width }
+      }
+      const left = Math.max(12, Math.min(rect.left - 6, window.innerWidth - width - 12))
+      return { left, bottom: Math.max(12, window.innerHeight - rect.top + 10), width }
+    }
+
+    function useAnchorTick(active) {
+      const [, bump] = React.useState(0)
+      React.useEffect(() => {
+        if (!active) return undefined
+        const update = () => bump((value) => value + 1)
+        window.addEventListener('resize', update)
+        window.addEventListener('scroll', update, true)
+        return () => {
+          window.removeEventListener('resize', update)
+          window.removeEventListener('scroll', update, true)
+        }
+      }, [active])
+    }
+
+    function metaRow(key, value) {
+      return h(
+        'div',
+        { className: '__dh_metaRow' },
+        h('span', { className: '__dh_metaKey' }, key),
+        h('span', { className: '__dh_metaValue' }, value),
+      )
+    }
+
+    function hookIcon() {
+      return h(
+        'svg',
+        { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', 'aria-hidden': 'true' },
+        h('path', {
+          d: 'M9 3.5v9a3 3 0 0 0 6 0V9',
+          stroke: 'currentColor',
+          strokeWidth: 1.8,
+          strokeLinecap: 'round',
+        }),
+        h('circle', { cx: 9, cy: 3.5, r: 1.8, stroke: 'currentColor', strokeWidth: 1.8 }),
+      )
+    }
+
+    function HooksTrigger() {
       const t = (key, values) => format(translate(key), values)
       const conn = useConnection()
-      const view = usePanel()
-      const [data, setData] = React.useState(null)
+      const view = useUi()
+      const count = usePendingCount()
+      const ref = React.useRef(null)
+
+      React.useEffect(() => {
+        triggerEl = ref.current
+        return () => {
+          triggerEl = null
+        }
+      }, [])
+
+      React.useEffect(() => {
+        if (!conn) return undefined
+        let cancelled = false
+        call('review', {})
+          .then((value) => {
+            if (!cancelled) setPendingCount((value?.hooks ?? []).length)
+          })
+          .catch(() => {})
+        return () => {
+          cancelled = true
+        }
+      }, [conn])
+
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: '__dh_trigger',
+          ref,
+          title: t('triggerLabel'),
+          'aria-label': t('triggerLabel'),
+          'aria-haspopup': 'dialog',
+          'aria-expanded': view.view === 'review' ? 'true' : 'false',
+          'data-open': view.view === 'review' ? 'true' : 'false',
+          onClick: () => (view.view === 'review' ? closeOverlay() : openReview()),
+        },
+        hookIcon(),
+        count > 0 ? h('span', { className: '__dh_triggerBadge' }, String(count)) : null,
+      )
+    }
+
+    function HooksStatsAction() {
+      const t = (key, values) => format(translate(key), values)
+      const view = useUi()
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: '__dh_actionBtn',
+          title: t('hookStats'),
+          'aria-label': t('hookStats'),
+          onClick: () => (view.stats ? closeOverlay() : openStats()),
+        },
+        hookIcon(),
+      )
+    }
+
+    function HooksReviewDialog() {
+      const t = (key, values) => format(translate(key), values)
+      const conn = useConnection()
       const [pending, setPending] = React.useState([])
+      const [selected, setSelected] = React.useState(() => new Set())
+      const [expanded, setExpanded] = React.useState(() => new Set())
+      const [busy, setBusy] = React.useState(false)
+      const [error, setError] = React.useState(null)
+      const dialogRef = React.useRef(null)
+      useAnchorTick(true)
+
+      const refresh = React.useCallback(async () => {
+        if (!conn) return
+        try {
+          const value = await call('review', {})
+          const items = value?.hooks ?? []
+          setPending(items)
+          setSelected(new Set(items.map((hook) => hook.key)))
+        } catch (failure) {
+          setError(failure?.message ?? String(failure))
+        }
+      }, [conn])
+
+      React.useEffect(() => {
+        refresh()
+      }, [refresh])
+
+      React.useEffect(() => {
+        const onKey = (event) => {
+          if (event.key !== 'Escape') return
+          event.stopPropagation()
+          closeOverlay()
+        }
+        const onDown = (event) => {
+          const target = event.target
+          if (dialogRef.current && dialogRef.current.contains(target)) return
+          if (triggerEl && triggerEl.contains(target)) return
+          closeOverlay()
+        }
+        document.addEventListener('keydown', onKey, true)
+        document.addEventListener('mousedown', onDown, true)
+        return () => {
+          document.removeEventListener('keydown', onKey, true)
+          document.removeEventListener('mousedown', onDown, true)
+        }
+      }, [])
+
+      const trust = async (keys) => {
+        if (keys.length === 0) return
+        setBusy(true)
+        try {
+          for (const key of keys) await call('setTrusted', { key, trusted: true })
+          setError(null)
+          closeOverlay()
+        } catch (failure) {
+          setError(failure?.message ?? String(failure))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      const toggleExpanded = (key) => {
+        setExpanded((current) => {
+          const next = new Set(current)
+          if (next.has(key)) next.delete(key)
+          else next.add(key)
+          return next
+        })
+      }
+
+      const toggleSelected = (key, on) => {
+        setSelected((current) => {
+          const next = new Set(current)
+          if (on) next.add(key)
+          else next.delete(key)
+          return next
+        })
+      }
+
+      return createPortal(
+        h(
+          'div',
+          {
+            className: '__dh_dlg',
+            style: anchorStyle(420),
+            ref: dialogRef,
+            role: 'dialog',
+            'aria-label': t('reviewTitle'),
+          },
+          h('div', { className: '__dh_dlgTitle' }, t('reviewTitle')),
+          error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
+          h(
+            'div',
+            { className: '__dh_dlgBody' },
+            pending.length === 0
+              ? h('div', { className: '__dh_empty' }, t('noPending'))
+              : pending.map((hook) =>
+                  h(
+                    'div',
+                    { key: hook.key, className: '__dh_hookRow' },
+                    h(
+                      'div',
+                      { className: '__dh_hookHead' },
+                      h('input', {
+                        type: 'checkbox',
+                        checked: selected.has(hook.key),
+                        disabled: busy,
+                        'aria-label': hook.title || hook.key,
+                        onChange: (event) => toggleSelected(hook.key, event.target.checked),
+                      }),
+                      h('span', { className: '__dh_hookName' }, hook.title || hook.key),
+                      h('span', { className: '__dh_badgeNew' }, t('newBadge')),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: '__dh_chevron',
+                          'aria-label': t('details'),
+                          'aria-expanded': expanded.has(hook.key) ? 'true' : 'false',
+                          onClick: () => toggleExpanded(hook.key),
+                        },
+                        expanded.has(hook.key) ? '▾' : '▸',
+                      ),
+                    ),
+                    expanded.has(hook.key)
+                      ? h(
+                          'div',
+                          { className: '__dh_hookMeta' },
+                          metaRow(t('sourceLabel'), hook.sourceLabel || hook.source || ''),
+                          metaRow(t('typeLabel'), hook.eventName),
+                          hook.command ? metaRow(t('commandLabel'), hook.command) : null,
+                          metaRow(
+                            t('timeoutLabel'),
+                            t('milliseconds', { value: Math.round((hook.timeout ?? 60) * 1000) }),
+                          ),
+                        )
+                      : null,
+                  ),
+                ),
+          ),
+          h(
+            'div',
+            { className: '__dh_dlgNote' },
+            t('reviewNoteBefore'),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: '__dh_link',
+                onClick: () => {
+                  closeOverlay()
+                  openBrowser()
+                },
+              },
+              t('settingsLink'),
+            ),
+            t('reviewNoteAfter'),
+          ),
+          h(
+            'div',
+            { className: '__dh_dlgActions' },
+            h(
+              'button',
+              { type: 'button', className: '__dh_btn', disabled: busy, onClick: closeOverlay },
+              t('notNow'),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: '__dh_btn',
+                disabled: busy || pending.length === 0,
+                onClick: () => trust(pending.map((hook) => hook.key)),
+              },
+              t('allowAll'),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: '__dh_btn __dh_btnPrimary',
+                disabled: busy || selected.size === 0,
+                onClick: () => trust([...selected]),
+              },
+              t('allowSelected'),
+            ),
+          ),
+        ),
+        document.body,
+      )
+    }
+
+    function HooksBrowserPanel() {
+      const t = (key, values) => format(translate(key), values)
+      const conn = useConnection()
+      const view = useUi()
+      const [data, setData] = React.useState(null)
       const [busy, setBusy] = React.useState(null)
       const [error, setError] = React.useState(null)
-      const popupRef = React.useRef(null)
+      const panelRef = React.useRef(null)
+      useAnchorTick(true)
 
       const refresh = React.useCallback(async () => {
         if (!conn) return
@@ -588,33 +948,22 @@ window.__ModuleLoader__.load({
         } catch (failure) {
           setError(failure?.message ?? String(failure))
         }
-        try {
-          const value = await call('review', {})
-          const items = value?.hooks ?? []
-          setPending(items)
-          setPendingCount(items.length)
-        } catch {
-          setPending([])
-          setPendingCount(0)
-        }
       }, [conn])
 
       React.useEffect(() => {
-        if (view.open) refresh()
-      }, [view.open, refresh])
+        refresh()
+      }, [refresh])
 
       React.useEffect(() => {
-        if (!view.open) return undefined
         const onKey = (event) => {
           if (event.key !== 'Escape') return
           event.stopPropagation()
-          closeBrowser()
+          closeOverlay()
         }
         const onDown = (event) => {
           const target = event.target
-          if (popupRef.current && popupRef.current.contains(target)) return
-          if (triggerEl && triggerEl.contains(target)) return
-          closeBrowser()
+          if (panelRef.current && panelRef.current.contains(target)) return
+          closeOverlay()
         }
         document.addEventListener('keydown', onKey, true)
         document.addEventListener('mousedown', onDown, true)
@@ -622,7 +971,7 @@ window.__ModuleLoader__.load({
           document.removeEventListener('keydown', onKey, true)
           document.removeEventListener('mousedown', onDown, true)
         }
-      }, [view.open])
+      }, [])
 
       const act = async (key, action) => {
         setBusy(key)
@@ -637,8 +986,6 @@ window.__ModuleLoader__.load({
         }
       }
 
-      if (!view.open) return null
-
       const hooks = data?.hooks ?? []
       const events = data?.events ?? []
       const handlers = view.eventName
@@ -646,59 +993,16 @@ window.__ModuleLoader__.load({
         : []
       const needsReview = (hook) => hook.trust === 'Untrusted' || hook.trust === 'Modified'
 
-      return h(
-        'div',
-        { className: '__dh_popup', ref: popupRef, role: 'dialog', 'aria-label': t('title') },
-        pending.length > 0
-          ? h(
-              'div',
-              { className: '__dh_card' },
-              h('div', { className: '__dh_cardTitle' }, t('reviewTitle')),
-              h('div', { className: '__dh_cardCount' }, t('reviewCount', { count: pending.length })),
-              h('div', { className: '__dh_cardHint' }, t('reviewNote')),
-              pending.map((hook) =>
-                h(
-                  'div',
-                  { key: hook.key, className: '__dh_pendingRow' },
-                  h('span', { className: '__dh_runMark __dh_warn' }, '!'),
-                  h('span', { className: '__dh_event' }, hook.eventName),
-                  h('span', { className: '__dh_name' }, hook.title || hook.key),
-                  h(
-                    'span',
-                    { className: '__dh_actions' },
-                    h(
-                      'button',
-                      {
-                        className: '__dh_btn __dh_btnPrimary',
-                        disabled: busy !== null,
-                        onClick: () =>
-                          act(hook.key, () => call('setTrusted', { key: hook.key, trusted: true })),
-                      },
-                      t('trust'),
-                    ),
-                  ),
-                ),
-              ),
-              h(
-                'div',
-                { className: '__dh_actions' },
-                h(
-                  'button',
-                  {
-                    className: '__dh_btn',
-                    disabled: busy !== null,
-                    onClick: () => act('trustAll', () => call('trustAll', {})),
-                  },
-                  t('trustAllContinue'),
-                ),
-                h('button', { className: '__dh_btn', onClick: closeBrowser }, t('continueWithout')),
-              ),
-            )
-          : null,
-        error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
+      return createPortal(
         h(
           'div',
-          { className: '__dh_panel' },
+          {
+            className: '__dh_dlg',
+            style: anchorStyle(460),
+            ref: panelRef,
+            role: 'dialog',
+            'aria-label': t('hookSettings'),
+          },
           h(
             'div',
             { className: '__dh_panelHead' },
@@ -712,11 +1016,16 @@ window.__ModuleLoader__.load({
               'span',
               { className: '__dh_actions' },
               view.eventName
-                ? h('button', { className: '__dh_btn', onClick: () => openBrowser() }, t('back'))
+                ? h(
+                    'button',
+                    { type: 'button', className: '__dh_btn', onClick: () => openBrowser() },
+                    t('back'),
+                  )
                 : null,
-              h('button', { className: '__dh_btn', onClick: closeBrowser }, t('close')),
+              h('button', { type: 'button', className: '__dh_btn', onClick: closeOverlay }, t('close')),
             ),
           ),
+          error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
           view.eventName
             ? h(
                 'div',
@@ -759,6 +1068,7 @@ window.__ModuleLoader__.load({
                             ? h(
                                 'button',
                                 {
+                                  type: 'button',
                                   className: '__dh_btn',
                                   disabled: busy === hook.key,
                                   onClick: () =>
@@ -769,6 +1079,7 @@ window.__ModuleLoader__.load({
                             : h(
                                 'button',
                                 {
+                                  type: 'button',
                                   className: '__dh_btn __dh_btnPrimary',
                                   disabled: busy === hook.key,
                                   onClick: () =>
@@ -800,143 +1111,27 @@ window.__ModuleLoader__.load({
                         ),
                         h('span', { className: '__dh_event' }, row.eventName),
                         h('span', { className: '__dh_count' }, `${row.active}/${row.installed}`),
+                        row.description
+                          ? h('span', { className: '__dh_name' }, row.description)
+                          : null,
                       ),
                     ),
               ),
         ),
+        document.body,
       )
     }
 
-    function HooksTrigger() {
+    /* ---------------- hook stats dialog (Codex style) ---------------- */
+
+    // Codex shows "Hook stats" from a message action: a dialog with the run
+    // counters and the run history.
+    function HooksStatsDialog() {
       const t = (key, values) => format(translate(key), values)
       const conn = useConnection()
-      const view = usePanel()
-      const count = usePendingCount()
-
-      React.useEffect(() => {
-        if (!conn) return undefined
-        let cancelled = false
-        call('review', {})
-          .then((value) => {
-            if (!cancelled) setPendingCount((value?.hooks ?? []).length)
-          })
-          .catch(() => {
-            if (!cancelled) setPendingCount(0)
-          })
-        return () => {
-          cancelled = true
-        }
-      }, [conn])
-
-      return h(
-        'button',
-        {
-          type: 'button',
-          className: '__dh_trigger',
-          'data-open': view.open ? 'true' : 'false',
-          'aria-label': t('triggerLabel'),
-          'aria-haspopup': 'dialog',
-          'aria-expanded': view.open ? 'true' : 'false',
-          title: count > 0 ? t('pendingTitle', { count }) : t('triggerLabel'),
-          ref: (node) => {
-            triggerEl = node
-          },
-          onClick: () => (view.open ? closeBrowser() : openBrowser()),
-        },
-        h(
-          'svg',
-          {
-            viewBox: '0 0 16 16',
-            width: 15,
-            height: 15,
-            fill: 'none',
-            stroke: 'currentColor',
-            strokeWidth: 1.4,
-            strokeLinecap: 'round',
-            'aria-hidden': 'true',
-          },
-          h('path', { d: 'M6.5 2.5v6a3.5 3.5 0 0 0 7 0V9' }),
-          h('path', { d: 'M11 5.5l2.5 2.5' }),
-        ),
-        count > 0 ? h('span', { className: '__dh_triggerBadge' }, String(count)) : null,
-      )
-    }
-
-
-    /* ---------------- hook stats modal (Codex style) ---------------- */
-
-    // Codex shows "Hook stats" from a message action: a modal with the run
-    // counters and the run history. The same panel is reachable from the
-    // assistant message action row.
-    const statsState = { open: false }
-    const statsListeners = new Set()
-
-    function setStatsOpen(open) {
-      if (statsState.open === open) return
-      statsState.open = open
-      for (const listener of statsListeners) listener()
-    }
-
-    function openStats() {
-      setStatsOpen(true)
-    }
-
-    function closeStats() {
-      setStatsOpen(false)
-    }
-
-    function useStatsState() {
-      const [, bump] = React.useState(0)
-      React.useEffect(() => {
-        const listener = () => bump((value) => value + 1)
-        statsListeners.add(listener)
-        return () => {
-          statsListeners.delete(listener)
-        }
-      }, [])
-      return statsState
-    }
-
-    function hookIcon() {
-      return h(
-        'svg',
-        {
-          viewBox: '0 0 16 16',
-          width: 15,
-          height: 15,
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 1.4,
-          strokeLinecap: 'round',
-          'aria-hidden': 'true',
-        },
-        h('path', { d: 'M6.5 2.5v6a3.5 3.5 0 0 0 7 0V9' }),
-        h('path', { d: 'M11 5.5l2.5 2.5' }),
-      )
-    }
-
-    function HooksStatsAction() {
-      const t = (key, values) => format(translate(key), values)
-      const view = useStatsState()
-      return h(
-        'button',
-        {
-          type: 'button',
-          className: '__dh_actionBtn',
-          'aria-label': t('hookStats'),
-          title: t('hookStats'),
-          onClick: () => (view.open ? closeStats() : openStats()),
-        },
-        hookIcon(),
-      )
-    }
-
-    function HooksStatsModal() {
-      const t = (key, values) => format(translate(key), values)
-      const conn = useConnection()
-      const view = useStatsState()
       const [stats, setStats] = React.useState(null)
       const [error, setError] = React.useState(null)
+      const dialogRef = React.useRef(null)
 
       const refresh = React.useCallback(async () => {
         if (!conn) return
@@ -949,31 +1144,35 @@ window.__ModuleLoader__.load({
       }, [conn])
 
       React.useEffect(() => {
-        if (view.open) refresh()
-      }, [view.open, refresh])
+        refresh()
+      }, [refresh])
 
       React.useEffect(() => {
-        if (!view.open) return undefined
         const onKey = (event) => {
           if (event.key !== 'Escape') return
           event.stopPropagation()
-          closeStats()
+          closeOverlay()
+        }
+        const onDown = (event) => {
+          const target = event.target
+          if (dialogRef.current && dialogRef.current.contains(target)) return
+          closeOverlay()
         }
         document.addEventListener('keydown', onKey, true)
-        return () => document.removeEventListener('keydown', onKey, true)
-      }, [view.open])
-
-      if (!view.open) return null
+        document.addEventListener('mousedown', onDown, true)
+        return () => {
+          document.removeEventListener('keydown', onKey, true)
+          document.removeEventListener('mousedown', onDown, true)
+        }
+      }, [])
 
       const history = stats?.history ?? []
-      return h(
-        'div',
-        { className: '__dh_modalRoot' },
-        h('div', { className: '__dh_modalBackdrop', onClick: closeStats }),
+      return createPortal(
         h(
           'div',
           {
-            className: '__dh_modal',
+            className: '__dh_modal __dh_dlgCenter',
+            ref: dialogRef,
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': t('hookStats'),
@@ -984,11 +1183,21 @@ window.__ModuleLoader__.load({
             h('span', { className: '__dh_modalTitle' }, t('hookStats')),
             h(
               'button',
-              { className: '__dh_iconBtn', 'aria-label': t('close'), onClick: closeStats },
+              {
+                type: 'button',
+                className: '__dh_iconBtn',
+                'aria-label': t('close'),
+                onClick: closeOverlay,
+              },
               '×',
             ),
           ),
-          h('div', { className: '__dh_statRow' }, h('span', null, t('runs')), h('span', null, String(stats?.runs ?? 0))),
+          h(
+            'div',
+            { className: '__dh_statRow' },
+            h('span', null, t('runs')),
+            h('span', null, String(stats?.runs ?? 0)),
+          ),
           h(
             'div',
             { className: '__dh_statRow' },
@@ -1020,6 +1229,21 @@ window.__ModuleLoader__.load({
                 ),
               ),
         ),
+        document.body,
+      )
+    }
+
+    /* ---------------- overlay host ---------------- */
+
+    function HooksOverlay() {
+      const view = useUi()
+      if (!view.view && !view.stats) return null
+      return h(
+        React.Fragment,
+        null,
+        view.view === 'review' ? h(HooksReviewDialog, null) : null,
+        view.view === 'browser' ? h(HooksBrowserPanel, null) : null,
+        view.stats ? h(HooksStatsDialog, null) : null,
       )
     }
 
@@ -1065,22 +1289,6 @@ window.__ModuleLoader__.load({
           /* the composer tool row is optional: Settings and /hooks still work */
         }
         try {
-          client.slots.inject('conversation.input.overlay', () =>
-            client.slots.register(
-              {
-                name: 'conversation.input.overlay',
-                id: 'dsh-codex-hooks/popup',
-                order: 40,
-                locale: NS,
-                inject: () => ({ t: translate }),
-              },
-              HooksPopup,
-            ),
-          )
-        } catch {
-          /* the composer overlay slot is optional: the settings page is the only entry */
-        }
-        try {
           client.slots.inject('conversation.chat.assistant-actions', () =>
             client.slots.register(
               {
@@ -1101,12 +1309,12 @@ window.__ModuleLoader__.load({
             client.slots.register(
               {
                 name: 'shell.overlay',
-                id: 'dsh-codex-hooks/stats-modal',
+                id: 'dsh-codex-hooks/overlay',
                 order: 40,
                 locale: NS,
                 inject: () => ({ t: translate }),
               },
-              HooksStatsModal,
+              HooksOverlay,
             ),
           )
         } catch {
