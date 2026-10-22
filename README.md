@@ -87,7 +87,7 @@ Handler types: `command`, `mcp_tool` (both executable), `prompt`, `agent` (parse
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **82 passed, 0 failed, 0 skipped**.
+- `node test/run-tests.mjs` → **83 passed, 0 failed, 0 skipped**.
 - `node selftest/host-e2e.mjs` → **14 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 

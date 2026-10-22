@@ -50,8 +50,11 @@ const FAKE_DATA = {
   ],
 }
 
-const FAKE_STATS = {
-  runs: 2,
+FAKE_DATA.groups = [
+  { id: 'config', label: 'From Config', count: FAKE_DATA.hooks.length, hooks: FAKE_DATA.hooks },
+]
+
+const FAKE_STATS = {  runs: 2,
   blocked: 1,
   failed: 0,
   history: [
@@ -276,6 +279,26 @@ export async function runClientBundleCheck() {
       throw new Error('the composer overlay slot must not be used any more')
     }
     return '4 slots'
+  })
+
+  await check('client/设置页列出钩子，点信任调用 setTrusted 并刷新', async () => {
+    const reg = registrations.find((entry) => entry.spec.name === 'settings.section')
+    if (!reg) throw new Error('settings section not registered')
+    renderTree({ type: reg.component, props: {} })
+    await settle()
+    let tree = renderTree({ type: reg.component, props: {} })
+    if (!findRow(tree, '__dh_btnPrimary')) {
+      const head = findRow(tree, '__dh_groupHead')
+      if (!head) throw new Error(`no group rendered: ${text(tree).join(' ')}`)
+      head.props.onClick()
+      tree = renderTree({ type: reg.component, props: {} })
+    }
+    const rendered = text(tree).join(' ')
+    const button = findRow(tree, '__dh_btnPrimary')
+    if (!button) throw new Error(`trust button not found in: ${rendered}`)
+    await button.props.onClick()
+    if (!calls.includes('hooks/setTrusted')) throw new Error(`setTrusted not called: ${calls.join(', ')}`)
+    return 'trust'
   })
 
   await check('client/为 /hooks 注册客户端动作', () => {
