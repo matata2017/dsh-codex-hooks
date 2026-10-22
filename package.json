@@ -39,11 +39,13 @@
     "lib/index.js",
     "lib/core.js",
     "lib/events.js",
+    "lib/runs.js",
     "client.js",
     "cordis.patch.yml",
     "locale/en.json",
     "locale/zh.json",
-    "icon.svg"
+    "icon.svg",
+    "README.zh.md"
   ],
   "dsh": {
     "bundle": {

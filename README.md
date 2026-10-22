@@ -4,6 +4,8 @@ Codex-compatible lifecycle hooks for [DeepSeek Harness](https://github.com/deeps
 
 It reads the same `hooks.json` format Codex uses, shows every discovered hook in a **Hooks** section of dsh settings, and runs the ones you trust on the matching dsh lifecycle event.
 
+中文文档：[README.zh.md](README.zh.md)
+
 ## What it actually does
 
 - **Discovers** `hooks.json` from three places, grouped in the UI:
@@ -35,6 +37,12 @@ The 14 Codex events are mapped onto dsh's own runtime events:
 | `PostModelRequest`, `PreCompact`, `PostCompact`, `Interrupt` | — parsed and reviewable, not dispatched yet | — |
 
 Default timeout is 600s, except `SessionEnd` (1s default, 3s maximum) so shutdown cannot hang.
+
+## Review, recent runs and `/hooks`
+
+- **Review banner** — when a session finds hooks whose fingerprint is unknown or changed, a strip above the composer offers *Not now* / *Allow all*. Approving pins the current fingerprints; anything else is edited later in **Settings → Hooks**, where trust is granted one hook at a time.
+- **Recent runs** — the top of the Hooks settings page shows `Runs / Blocked / Failed` for the last 200 executions plus the newest rows (status, event, hook, source, duration). Hook output is *not* printed into the conversation; the model only ever sees a handler's `additionalContext`.
+- **`/hooks`** — the same picture from the composer, without opening settings: totals per source, how many still need review, run counters and the newest runs. It is a normal dsh slash command (registered when the host composes the `commands` service), so it never reaches the model.
 
 ## Install
 
@@ -79,7 +87,7 @@ Handler types: `command`, `mcp_tool` (both executable), `prompt`, `agent` (parse
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **78 passed, 0 failed, 0 skipped**, including 8 fingerprints captured from a real Codex installation (`test/vectors.json`).
+- `node test/run-tests.mjs` → **84 passed, 0 failed, 0 skipped**, including 8 fingerprints captured from a real Codex installation (`test/vectors.json`).
 - `UserPromptSubmit` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 - `selftest/host-e2e.mjs` exercises the host side against a real profile.
 

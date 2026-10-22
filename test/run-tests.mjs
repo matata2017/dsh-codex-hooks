@@ -23,7 +23,7 @@ import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, openSync, closeSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import * as spec from './spec.mjs'
 import { runConformance, runConformanceSelfTest } from './plugin-conformance.mjs'
@@ -812,6 +812,92 @@ for (const item of await runConformance({ root: ROOT, spec, vectors })) {
 section('H. 探针自检（证明探针本身能抓错）')
 for (const item of await runConformanceSelfTest({ spec, vectors })) {
   record(item.status, item.name, item.detail)
+}
+
+// ---------------------------------------------------------------------------
+// I. 运行记录（lib/runs.js）：计数、环形上限、/hooks 文本
+// ---------------------------------------------------------------------------
+section('I. 运行记录与 /hooks 文本（lib/runs.js）')
+{
+  const runs = await import(pathToFileURL(join(ROOT, 'lib', 'runs.js')).href)
+
+  test('runs/计数：ok、blocked、failed 分项', () => {
+    const stats = runs.summarize([
+      { status: 'ok' },
+      { status: 'blocked' },
+      { status: 'failed' },
+      { status: 'blocked' },
+      { status: 'skipped' },
+    ])
+    assertEqual(stats.runs, 5, 'runs')
+    assertEqual(stats.blocked, 2, 'blocked')
+    assertEqual(stats.failed, 1, 'failed')
+    return '2 blocked / 1 failed'
+  })
+
+  test('runs/history 最多保留 50 行', () => {
+    const rows = Array.from({ length: 80 }, (_, index) => ({ status: 'ok', index }))
+    assertEqual(runs.summarize(rows).history.length, 50, 'history length')
+    return '50'
+  })
+
+  test('runs/环形缓冲：超出上限丢最旧的，最新在前', () => {
+    const log = runs.createRunLog({ limit: 3 })
+    log.record('UserPromptSubmit', [{ key: 'a', status: 'ok' }])
+    log.record('Stop', [{ key: 'b', status: 'failed' }])
+    log.record('SessionStart', [{ key: 'c', status: 'blocked' }])
+    log.record('PreToolUse', [{ key: 'd', status: 'ok' }])
+    const stats = log.stats()
+    assertEqual(stats.runs, 3, 'runs')
+    assertEqual(stats.history[0].key, 'd', 'newest first')
+    assertEqual(stats.history.at(-1).key, 'b', 'oldest dropped')
+    assertEqual(stats.blocked, 1, 'blocked counter')
+    return 'trimmed to 3'
+  })
+
+  test('runs/标题优先 statusMessage，其次命令名，最后 key', () => {
+    assertEqual(
+      runs.hookTitle({ statusMessage: 'lint gate', handler: { command: 'C:/bin/echo-hook.mjs' } }),
+      'lint gate',
+      'statusMessage wins',
+    )
+    assertEqual(runs.hookTitle({ handler: { command: 'C:\\tools\\echo-hook.mjs' } }), 'echo-hook', 'basename')
+    assertEqual(runs.hookTitle({ key: 'k' }), 'k', 'key fallback')
+    return 'echo-hook'
+  })
+
+  test('runs//hooks 文本：总数、信任、待审核清单与运行计数', () => {
+    const text = runs.hooksCommandText({
+      hooks: [
+        { eventName: 'UserPromptSubmit', key: 'a', trust: 'Trusted', enabled: true, group: 'config', sourceLabel: 'hooks.json', handler: { command: 'echo-hook.mjs' } },
+        { eventName: 'Stop', key: 'b', trust: 'Untrusted', enabled: true, group: 'projects', sourceLabel: 'D:/w/.dsh/hooks.json', handler: { command: 'stop.mjs' } },
+        { eventName: 'SessionStart', key: 'c', trust: 'Trusted', enabled: false, group: 'config', sourceLabel: 'hooks.json' },
+      ],
+      stats: {
+        runs: 2,
+        blocked: 1,
+        failed: 0,
+        history: [
+          { eventName: 'UserPromptSubmit', title: 'echo-hook', sourceLabel: 'hooks.json', status: 'blocked', durationMs: 12, reason: 'nope' },
+          { eventName: 'Stop', title: 'stop', source: 'projects', status: 'ok', durationMs: 3 },
+        ],
+      },
+    })
+    assert(/3 total/.test(text), `total missing: ${text}`)
+    assert(/2 trusted/.test(text), 'trusted count')
+    assert(/1 needs review/.test(text), 'review count')
+    assert(/1 disabled/.test(text), 'disabled count')
+    assert(/Needs review:[\s\S]*Stop/.test(text), 'review list')
+    assert(/2 runs · 1 blocked · 0 failed/.test(text), 'run counters')
+    assert(/✕ UserPromptSubmit/.test(text), 'blocked row mark')
+    return 'ok'
+  })
+
+  test('runs//hooks 文本：空目录给出提示而不是空白', () => {
+    const text = runs.hooksCommandText({ hooks: [], stats: { runs: 0, blocked: 0, failed: 0, history: [] } })
+    assert(/No hooks found/.test(text), text)
+    return 'hint'
+  })
 }
 
 // ---------------------------------------------------------------------------

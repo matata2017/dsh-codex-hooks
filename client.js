@@ -37,6 +37,20 @@ window.__ModuleLoader__.load({
       matcher: 'matcher {value}',
       source: 'Source {value}',
       error: 'Could not reach the hooks service: {message}',
+      recentRuns: 'Recent runs',
+      runs: 'Runs',
+      blocked: 'Blocked',
+      failed: 'Failed',
+      noRuns: 'No hook has run in this session yet.',
+      refresh: 'Refresh',
+      reviewBanner: '{count} hook(s) need review before they can run.',
+      notNow: 'Not now',
+      allowAll: 'Allow all',
+      reviewSettingsHint: 'You can change this later in Settings → Hooks.',
+      statusOk: 'Completed',
+      statusBlocked: 'Blocked',
+      statusFailed: 'Failed',
+      statusSkipped: 'Skipped',
     }
 
     const zh = {
@@ -71,6 +85,20 @@ window.__ModuleLoader__.load({
       matcher: '匹配 {value}',
       source: '来源 {value}',
       error: '无法连接 hooks 服务：{message}',
+      recentRuns: '最近运行',
+      runs: '运行',
+      blocked: '拦截',
+      failed: '失败',
+      noRuns: '本次会话还没有钩子运行过。',
+      refresh: '刷新',
+      reviewBanner: '有 {count} 个钩子需要审核才能运行。',
+      notNow: '稍后',
+      allowAll: '全部信任',
+      reviewSettingsHint: '之后可在 设置 → Hooks 中修改。',
+      statusOk: '已完成',
+      statusBlocked: '被拦截',
+      statusFailed: '失败',
+      statusSkipped: '已跳过',
     }
 
     const STYLE = [
@@ -102,6 +130,13 @@ window.__ModuleLoader__.load({
       '.__dh_status{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
       '.__dh_error{font-size:12px;color:var(--dsw-alias-state-error-primary,#f85149)}',
       '.__dh_empty{font-size:12px;color:var(--dsw-alias-label-tertiary,#6b7280);padding:6px 0}',
+      '.__dh_stats{border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:10px;padding:8px 12px}',
+      '.__dh_runRow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563)}',
+      '.__dh_runMark{width:14px;text-align:center;color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_runMarkBad{color:var(--dsw-alias-state-error-primary,#f85149)}',
+      '.__dh_banner{display:flex;align-items:center;gap:8px;margin:0 0 6px;padding:6px 10px;border:1px solid var(--dsw-alias-state-business-primary,#3964fe);border-radius:10px;background:var(--dsw-alias-bg-layer-3,#f7f8fa);font-size:12px}',
+      '.__dh_bannerText{flex:1;min-width:0;color:var(--dsw-alias-label-primary,#1f2328)}',
+      '.__dh_bannerHint{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
     ].join('')
 
     /* ---------------- connection plumbing ---------------- */
@@ -175,6 +210,15 @@ window.__ModuleLoader__.load({
       Untrusted: '__dh_badge __dh_badgeWarn',
     }
 
+    const STATUS_KEY = {
+      ok: 'statusOk',
+      blocked: 'statusBlocked',
+      failed: 'statusFailed',
+      skipped: 'statusSkipped',
+    }
+
+    const STATUS_MARK = { ok: '\u2713', blocked: '\u2715', failed: '!', skipped: '-' }
+
     /* ---------------- component ---------------- */
 
     function HooksSection() {
@@ -185,6 +229,7 @@ window.__ModuleLoader__.load({
       const [expanded, setExpanded] = React.useState(() => new Set(['config']))
       const [busy, setBusy] = React.useState(null)
       const [notice, setNotice] = React.useState(null)
+      const [stats, setStats] = React.useState(null)
 
       const refresh = React.useCallback(async () => {
         if (!conn) return
@@ -194,6 +239,11 @@ window.__ModuleLoader__.load({
           setError(null)
         } catch (failure) {
           setError(failure?.message ?? String(failure))
+        }
+        try {
+          setStats(await call('stats', {}))
+        } catch {
+          setStats(null)
         }
       }, [conn])
 
@@ -233,6 +283,52 @@ window.__ModuleLoader__.load({
         { className: '__dh_root' },
         h('h2', { className: '__dh_title' }, t('title')),
         h('p', { className: '__dh_subtitle' }, t('subtitle')),
+        stats
+          ? h(
+              'div',
+              { className: '__dh_stats' },
+              h(
+                'div',
+                { className: '__dh_rowHead' },
+                h('span', { className: '__dh_event' }, t('recentRuns')),
+                h(
+                  'span',
+                  { className: '__dh_count' },
+                  `${t('runs')} ${stats.runs} \u00b7 ${t('blocked')} ${stats.blocked} \u00b7 ${t('failed')} ${stats.failed}`,
+                ),
+                h(
+                  'span',
+                  { className: '__dh_actions' },
+                  h('button', { className: '__dh_btn', onClick: () => refresh() }, t('refresh')),
+                ),
+              ),
+              (stats.history ?? []).length === 0
+                ? h('div', { className: '__dh_empty' }, t('noRuns'))
+                : (stats.history ?? []).slice(0, 10).map((row, index) =>
+                    h(
+                      'div',
+                      { key: `${row.at}-${index}`, className: '__dh_runRow' },
+                      h(
+                        'span',
+                        {
+                          className:
+                            row.status === 'ok' ? '__dh_runMark' : '__dh_runMark __dh_runMarkBad',
+                        },
+                        STATUS_MARK[row.status] ?? '?',
+                      ),
+                      h('span', { className: '__dh_event' }, row.eventName),
+                      h('span', { className: '__dh_name' }, row.title),
+                      h('span', { className: '__dh_count' }, row.sourceLabel || row.source || ''),
+                      h(
+                        'span',
+                        { className: '__dh_actions __dh_count' },
+                        t(STATUS_KEY[row.status] ?? 'statusFailed'),
+                        row.durationMs ? ` ${row.durationMs}ms` : '',
+                      ),
+                    ),
+                  ),
+            )
+          : null,
         error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
         notice ? h('div', { className: '__dh_status' }, notice) : null,
         !conn && !data ? h('div', { className: '__dh_empty' }, t('loading')) : null,
@@ -342,6 +438,66 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /* ---------------- composer review banner ---------------- */
+
+    function ReviewStrip() {
+      const t = (key, values) => format(translate(key), values)
+      const conn = useConnection()
+      const [pending, setPending] = React.useState([])
+      const [hidden, setHidden] = React.useState(false)
+      const [busy, setBusy] = React.useState(false)
+
+      React.useEffect(() => {
+        if (!conn) return undefined
+        let alive = true
+        call('review', {})
+          .then((value) => {
+            if (alive) setPending(value?.hooks ?? [])
+          })
+          .catch(() => {
+            if (alive) setPending([])
+          })
+        return () => {
+          alive = false
+        }
+      }, [conn])
+
+      if (hidden || pending.length === 0) return null
+
+      const allowAll = async () => {
+        setBusy(true)
+        try {
+          await call('trustAll', {})
+        } catch {
+          /* the settings section reports the failure */
+        }
+        setBusy(false)
+        setPending([])
+        setHidden(true)
+      }
+
+      return h(
+        'div',
+        { className: '__dh_banner' },
+        h(
+          'span',
+          { className: '__dh_bannerText' },
+          t('reviewBanner', { count: pending.length }),
+          h('span', { className: '__dh_bannerHint' }, ` ${t('reviewSettingsHint')}`),
+        ),
+        h(
+          'button',
+          { className: '__dh_btn', disabled: busy, onClick: () => setHidden(true) },
+          t('notNow'),
+        ),
+        h(
+          'button',
+          { className: '__dh_btn __dh_btnPrimary', disabled: busy, onClick: allowAll },
+          t('allowAll'),
+        ),
+      )
+    }
+
     /* ---------------- plugin entry point ---------------- */
 
     function apply(ctx) {
@@ -367,6 +523,22 @@ window.__ModuleLoader__.load({
             HooksSection,
           ),
         )
+        try {
+          client.slots.inject('conversation.input.overlay', () =>
+            client.slots.register(
+              {
+                name: 'conversation.input.overlay',
+                id: 'hooks-review',
+                order: 40,
+                locale: NS,
+                inject: () => ({ t: translate }),
+              },
+              ReviewStrip,
+            ),
+          )
+        } catch {
+          /* the composer overlay slot is optional: without it the settings page is the only entry */
+        }
         setConnection(resolveHandle(client.connection))
       })
       ctx.inject(['connection'], (rpc) => {
