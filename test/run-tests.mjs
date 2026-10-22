@@ -541,6 +541,35 @@ test('output/session/disposed 只接受 systemMessage', () => {
   return 'ok'
 })
 
+test('output/approval/request 接受 allow 与 deny，其他事件不接受', () => {
+  const allow = spec.parseHookOutput(JSON.stringify({ decision: 'allow' }), { eventName: 'approval/request' })
+  assertEqual(allow.decision, 'allow', 'allow parsed')
+  const deny = spec.parseHookOutput(JSON.stringify({ decision: 'deny', reason: 'not in CI' }), { eventName: 'approval/request' })
+  assertEqual(deny.reason, 'not in CI', 'deny reason')
+  assertEqual(
+    spec.parseHookOutput(JSON.stringify({ decision: 'allow' }), { eventName: 'tools/pre-execute' }),
+    null,
+    'non-approval events still only block',
+  )
+  const allowed = spec.classifyRun({ exitCode: 0, stdout: '{"decision":"allow"}', stderr: '' }, { eventName: 'approval/request' })
+  assertEqual(allowed.status, 'ok', 'allow keeps the run ok')
+  assertEqual(allowed.decision, 'allow', 'allow surfaced for the approval seam')
+  const denied = spec.classifyRun({ exitCode: 0, stdout: '{"decision":"deny"}', stderr: '' }, { eventName: 'approval/request' })
+  assertEqual(denied.status, 'blocked', 'deny blocks')
+  assertEqual(denied.reason, 'approval/request hook denied approval', 'deny gets a default reason')
+  return 'ok'
+})
+
+test('parse/mcp_tool 可解析但不可执行（不会假装 runnable）', () => {
+  assertEqual(spec.EXECUTABLE_HANDLER_TYPES.includes('mcp_tool'), false, 'mcp_tool is not dispatched')
+  const parsed = spec.parseHooksFile(
+    JSON.stringify({ hooks: { 'tools/pre-execute': [{ type: 'mcp_tool', server: 'kb', tool: 'log' }] } }),
+  )
+  const [described] = spec.describeHooks(parsed, { sourceKey: 'C:/x/hooks.json', platform: 'linux' })
+  assertEqual(described.executable, false, 'shown as reviewable, not runnable')
+  return 'ok'
+})
+
 test('run/exit 0 + 空 stdout → 成功无操作', () => {
   const result = spec.classifyRun({ exitCode: 0, stdout: '', stderr: '' }, { eventName: 'agent/turn-stopping' })
   assertEqual(result.status, 'ok', 'status')

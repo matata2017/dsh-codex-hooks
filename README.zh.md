@@ -14,7 +14,7 @@ English: [README.md](README.md)
   - **来自项目配置文件** —— 本会话碰过的 workspace 里的 `<workspace>/.dsh/hooks.json`（最多记 32 个）。
 - **指纹**：把钩子定义规范化成 JSON，再对它 UTF-8 字节做 `sha256:`。信任就钉在这个指纹上，所以改掉一条钩子的命令，它的信任会自动失效，不会悄悄跑新代码。
 - **逐个审查信任**：新钩子处于*待审核*；你在设置页批准当前指纹，状态存在 `$DSH_HOME/hooks.state.json`，同时每条钩子有独立的启用开关。
-- **执行**：只有既启用又可信的 `command`、`mcp_tool` 处理器才会跑，带自己的超时、`cwd`、环境变量，以及 `command`/`commandWindows` 平台拆分。
+- **执行**：只有既启用又可信的 `command` 处理器才会跑，带自己的超时、`cwd`、环境变量，以及 `command`/`commandWindows` 平台拆分。`approval/request` 钩子可以返回 `{"decision":"allow"}` 直接放行待审批的工具调用，或返回 `deny`；任何一条钩子 deny 都压过 allow。
 - **注入上下文**：处理器返回的 `additionalContext` 会追加到模型输入，适用于 `agent/pre-step`、`tools/pre-execute`、`tools/post-execute`、`agent/created`（默认上限 2500 字符）。
 - **匹配**：工具类 seam（`tools/pre-execute`、`tools/post-execute`、`approval/request`）支持 matcher：`*`、精确名、`A|B` 多选或正则。
 
@@ -83,11 +83,11 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 
 一条钩子一个对象：`command`（或 `type: "mcp_tool"` 加 `server` + `tool`），可选 `matcher`、`timeout`、`statusMessage`、`additionalContextLimit`、`async`。
 
-处理器类型：`command`、`mcp_tool`（可执行）；`prompt`、`agent`（可解析、可审查，暂不执行）。
+处理器类型：只有 `command` 会被执行。`mcp_tool`、`prompt`、`agent` 可以解析、可以审查，但暂不派发——它们显示为“已安装”而不是“生效”，宁可说清楚，也不要让一条钩子静默地什么都不做。
 
 ## 验证状态
 
-- `node test/run-tests.mjs` → **83 passed, 0 failed, 0 skipped**。
+- `node test/run-tests.mjs` → **85 passed, 0 failed, 0 skipped**。
 - `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **14 passed, 0 failed**。
 - `agent/pre-step` 在真实 dsh 会话里跑通：每提交一次提示，示例钩子打印一行 `echo-hook received event=…`。
 

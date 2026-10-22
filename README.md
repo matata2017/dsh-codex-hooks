@@ -14,7 +14,7 @@ dsh has no hook config of its own: it exposes interception seams, and this plugi
   - **From Projects** — `<workspace>/.dsh/hooks.json` for the workspaces this session has touched (up to 32 remembered).
 - **Fingerprints** each hook: normalized JSON of the hook definition, `sha256:` over its UTF-8 bytes. The fingerprint is what the trust decision is pinned to, so editing a hook's command invalidates its trust instead of silently running new code.
 - **Reviews trust per hook** in the settings page: new hooks start in *needs review*; you approve the current fingerprint, and the state lives in `$DSH_HOME/hooks.state.json` together with an independent enabled/disabled switch per hook.
-- **Runs** `command` and `mcp_tool` handlers only when they are enabled *and* trusted, with the hook's own timeout, `cwd`, environment and `command`/`commandWindows` split.
+- **Runs** `command` handlers only when they are enabled *and* trusted, with the hook's own timeout, `cwd`, environment and `command`/`commandWindows` split. An `approval/request` hook may answer `{"decision":"allow"}` to auto-approve the pending tool call, or `deny`; a deny from any hook wins over an allow.
 - **Injects context**: a handler's `additionalContext` is appended to the model input on `agent/pre-step`, `tools/pre-execute`, `tools/post-execute` and `agent/created` (2500 characters by default).
 - **Matches** the tool seams (`tools/pre-execute`, `tools/post-execute`, `approval/request`) with `*`, exact names, `Name|Other` or a regular expression.
 
@@ -83,11 +83,11 @@ Restart the dsh web/desktop host afterwards, then open **Settings → Hooks**.
 
 One object per hook: `command` (or `type: "mcp_tool"` with `server` + `tool`), optional `matcher`, `timeout`, `statusMessage`, `additionalContextLimit`, `async`.
 
-Handler types: `command`, `mcp_tool` (both executable), `prompt`, `agent` (parsed and reviewable, not dispatched yet).
+Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `agent` are parsed and reviewable but not dispatched — they show up as installed, never as active, because a hook that silently does nothing is worse than one that says so.
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **83 passed, 0 failed, 0 skipped**.
+- `node test/run-tests.mjs` → **85 passed, 0 failed, 0 skipped**.
 - `node selftest/host-e2e.mjs` → **14 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 
