@@ -187,16 +187,16 @@ window.__ModuleLoader__.load({
       '.__dh_body{border-top:1px solid var(--dsw-alias-border-l2,#dce2eb);padding:6px 12px 10px;display:flex;flex-direction:column;gap:8px}',
       '.__dh_row{display:flex;flex-direction:column;gap:4px;padding:8px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb)}',
       '.__dh_row:last-child{border-bottom:none}',
-      '.__dh_rowHead{display:flex;align-items:center;gap:8px}',
-      '.__dh_event{font-weight:600;font-size:12px}',
-      '.__dh_desc{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_rowHead{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}',
+      '.__dh_event{font-weight:600;font-size:12px;flex:none;white-space:nowrap}',
+      '.__dh_desc{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.__dh_name{font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.__dh_actions{display:flex;align-items:center;gap:6px;margin-left:auto}',
-      '.__dh_btn{border:1px solid var(--dsw-alias-border-l2,#dce2eb);background:var(--dsw-alias-bg-layer-3,#f7f8fa);color:var(--dsw-alias-label-primary,#1f2328);border-radius:8px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}',
+      '.__dh_actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex:none}',
+      '.__dh_btn{border:1px solid var(--dsw-alias-border-l2,#dce2eb);background:var(--dsw-alias-bg-layer-3,#f7f8fa);color:var(--dsw-alias-label-primary,#1f2328);border-radius:8px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;flex:none}',
       '.__dh_btn:hover:not(:disabled){border-color:var(--dsw-alias-state-business-primary,#3964fe)}',
       '.__dh_btn:disabled{opacity:.5;cursor:not-allowed}',
       '.__dh_btnPrimary{border-color:var(--dsw-alias-state-business-primary,#3964fe);background:var(--dsw-alias-state-business-primary,#3964fe);color:#fff}',
-      '.__dh_switch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_switch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-tertiary,#6b7280);white-space:nowrap;flex:none}',
       '.__dh_switch input{accent-color:var(--dsw-alias-state-business-primary,#3964fe)}',
       '.__dh_status{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
       '.__dh_error{font-size:12px;color:var(--dsw-alias-state-error-primary,#f85149)}',
@@ -205,13 +205,6 @@ window.__ModuleLoader__.load({
       '.__dh_runRow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563)}',
       '.__dh_runMark{width:14px;text-align:center;color:var(--dsw-alias-label-tertiary,#6b7280)}',
       '.__dh_runMarkBad{color:var(--dsw-alias-state-error-primary,#f85149)}',
-      '.__dh_banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px;padding:6px 10px;border:1px solid var(--dsw-alias-state-business-primary,#3964fe);border-radius:10px;background:var(--dsw-alias-bg-layer-3,#f7f8fa);font-size:12px;line-height:18px;pointer-events:auto}',
-      '.__dh_bannerText{flex:1;min-width:0;color:var(--dsw-alias-label-primary,#1f2328)}',
-      '.__dh_bannerHint{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
-      '.__dh_card{border:1px solid var(--dsw-alias-state-business-primary,#3964fe);border-radius:10px;background:var(--dsw-alias-bg-layer-3,#f7f8fa);padding:8px 10px;display:flex;flex-direction:column;gap:4px;margin:0 0 6px}',
-      '.__dh_cardTitle{font-weight:600;font-size:12px}',
-      '.__dh_cardCount{font-size:12px;color:var(--dsw-alias-state-warning-primary,#b8820b)}',
-      '.__dh_cardHint{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
       '.__dh_panel{display:flex;flex-direction:column;gap:8px;min-height:0}',
       '.__dh_panelHead{display:flex;align-items:center;gap:8px}',
       '.__dh_list{display:flex;flex-direction:column}',
@@ -223,7 +216,6 @@ window.__ModuleLoader__.load({
       '.__dh_trigger{position:relative;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary,#4b5563);cursor:pointer}',
       '.__dh_trigger:hover{background:var(--dsw-alias-interactive-bg-hover,#f2f4f7)}',
       '.__dh_trigger[data-open="true"]{background:var(--dsw-alias-interactive-bg-hover,#f2f4f7);color:var(--dsw-alias-label-primary,#1f2328)}',
-      '.__dh_triggerBadge{position:absolute;top:-3px;right:-3px;min-width:14px;height:14px;padding:0 3px;border-radius:999px;background:var(--dsw-alias-state-error-primary,#f85149);color:#fff;font-size:9px;line-height:14px;text-align:center;pointer-events:none}',
       '.__dh_dlg{position:fixed;z-index:1200;box-sizing:border-box;min-width:340px;max-width:min(440px,calc(100vw - 24px));max-height:min(72vh,560px);overflow:auto;border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:14px;background:var(--dsw-alias-bg-base,#fff);box-shadow:var(--dsw-elevation-prominent);padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-primary,#1f2328);text-align:left}',
       '.__dh_dlgTitle{font-size:15px;font-weight:600}',
       '.__dh_dlgBody{display:flex;flex-direction:column;gap:6px}',
@@ -371,6 +363,7 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         refresh()
       }, [refresh])
+      useRevision(refresh)
 
       const toggleGroup = (id) => {
         setExpanded((current) => {
@@ -387,6 +380,7 @@ window.__ModuleLoader__.load({
         try {
           const result = await action()
           if (result && result.ok === false) throw new Error(result.error ?? 'hooks call failed')
+          bumpRevision()
           await refresh()
           return result
         } catch (failure) {
@@ -566,8 +560,6 @@ window.__ModuleLoader__.load({
     // row. One overlay state drives all three.
     const ui = { view: null, eventName: null, stats: false }
     const uiListeners = new Set()
-    const pendingState = { count: 0 }
-    const pendingListeners = new Set()
     let triggerEl = null
 
     function setUi(patch) {
@@ -609,22 +601,23 @@ window.__ModuleLoader__.load({
       setUi({ view: null, eventName: null, stats: false })
     }
 
-    function setPendingCount(value) {
-      if (value === pendingState.count) return
-      pendingState.count = value
-      for (const listener of pendingListeners) listener()
+    // Hooks and their trust state live on the host, so every panel that changes them
+    // pings this counter and the settings section refreshes itself.
+    let revision = 0
+    const revisionListeners = new Set()
+
+    function bumpRevision() {
+      revision += 1
+      for (const listener of revisionListeners) listener()
     }
 
-    function usePendingCount() {
-      const [, bump] = React.useState(0)
+    function useRevision(onChange) {
       React.useEffect(() => {
-        const listener = () => bump((value) => value + 1)
-        pendingListeners.add(listener)
+        revisionListeners.add(onChange)
         return () => {
-          pendingListeners.delete(listener)
+          revisionListeners.delete(onChange)
         }
-      }, [])
-      return pendingState.count
+      }, [onChange])
     }
 
     // The panels float above the composer, so they track the trigger button.
@@ -681,8 +674,8 @@ window.__ModuleLoader__.load({
       const t = (key, values) => format(translate(key), values)
       const conn = useConnection()
       const view = useUi()
-      const count = usePendingCount()
       const ref = React.useRef(null)
+      const asked = React.useRef(false)
 
       React.useEffect(() => {
         triggerEl = ref.current
@@ -691,12 +684,14 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
+      // Codex asks for review the moment hooks need trusting; no badge, no arithmetic.
       React.useEffect(() => {
-        if (!conn) return undefined
+        if (!conn || asked.current) return undefined
+        asked.current = true
         let cancelled = false
         call('review', {})
           .then((value) => {
-            if (!cancelled) setPendingCount((value?.hooks ?? []).length)
+            if (!cancelled && (value?.hooks ?? []).length > 0) openReview()
           })
           .catch(() => {})
         return () => {
@@ -713,12 +708,11 @@ window.__ModuleLoader__.load({
           title: t('triggerLabel'),
           'aria-label': t('triggerLabel'),
           'aria-haspopup': 'dialog',
-          'aria-expanded': view.view === 'review' ? 'true' : 'false',
-          'data-open': view.view === 'review' ? 'true' : 'false',
-          onClick: () => (view.view === 'review' ? closeOverlay() : openReview()),
+          'aria-expanded': view.view === 'browser' ? 'true' : 'false',
+          'data-open': view.view === 'browser' ? 'true' : 'false',
+          onClick: () => (view.view === 'browser' ? closeOverlay() : openBrowser()),
         },
         hookIcon(),
-        count > 0 ? h('span', { className: '__dh_triggerBadge' }, String(count)) : null,
       )
     }
 
@@ -791,6 +785,7 @@ window.__ModuleLoader__.load({
         try {
           for (const key of keys) await call('setTrusted', { key, trusted: true })
           setError(null)
+          bumpRevision()
           closeOverlay()
         } catch (failure) {
           setError(failure?.message ?? String(failure))
@@ -938,7 +933,6 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = React.useState(null)
       const [error, setError] = React.useState(null)
       const panelRef = React.useRef(null)
-      useAnchorTick(true)
 
       const refresh = React.useCallback(async () => {
         if (!conn) return
@@ -978,6 +972,7 @@ window.__ModuleLoader__.load({
         try {
           const result = await action()
           if (result && result.ok === false) throw new Error(result.error ?? 'hooks call failed')
+          bumpRevision()
           await refresh()
         } catch (failure) {
           setError(failure?.message ?? String(failure))
@@ -997,8 +992,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           {
-            className: '__dh_dlg',
-            style: anchorStyle(460),
+            className: '__dh_dlg __dh_dlgCenter',
             ref: panelRef,
             role: 'dialog',
             'aria-label': t('hookSettings'),
