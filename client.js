@@ -916,7 +916,7 @@ window.__ModuleLoader__.load({
               {
                 name: 'conversation.input.left',
                 id: 'dsh-codex-hooks/trigger',
-                order: 10,
+                order: 1,
                 locale: NS,
                 inject: () => ({ t: translate }),
               },
