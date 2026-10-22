@@ -187,15 +187,14 @@ window.__ModuleLoader__.load({
       '.__dh_badge{border:1px solid var(--dsw-alias-state-business-primary,#3964fe);color:var(--dsw-alias-state-business-primary,#3964fe);border-radius:999px;padding:0 8px;font-size:10px;white-space:nowrap}',
       '.__dh_badgeWarn{border-color:var(--dsw-alias-state-error-primary,#f85149);color:var(--dsw-alias-state-error-primary,#f85149)}',
       '.__dh_body{border-top:1px solid var(--dsw-alias-border-l2,#dce2eb);padding:6px 12px 10px;display:flex;flex-direction:column;gap:8px}',
-      '.__dh_row{display:flex;flex-direction:column;gap:5px;padding:10px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb)}',
+      '.__dh_row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb)}',
       '.__dh_row:last-child{border-bottom:none}',
-      '.__dh_rowHead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+      '.__dh_rowMain{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}',
+      '.__dh_rowHead{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
       '.__dh_event{font-weight:600;font-size:12px;flex:none;white-space:nowrap}',
       '.__dh_desc{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#6b7280);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.__dh_rowFoot{display:flex;align-items:center;gap:10px}',
-      '.__dh_rowTitle{flex:1;min-width:0}',
-      '.__dh_name{font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.__dh_actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex:none}',
+      '.__dh_name{font-size:12px;line-height:16px;color:var(--dsw-alias-label-secondary,#4b5563);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.__dh_actions{display:flex;align-items:center;gap:6px;flex:none}',
       '.__dh_btn{border:1px solid var(--dsw-alias-border-l2,#dce2eb);background:var(--dsw-alias-bg-layer-3,#f7f8fa);color:var(--dsw-alias-label-primary,#1f2328);border-radius:8px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;flex:none}',
       '.__dh_btn:hover:not(:disabled){border-color:var(--dsw-alias-state-business-primary,#3964fe)}',
       '.__dh_btn:disabled{opacity:.5;cursor:not-allowed}',
@@ -491,24 +490,21 @@ window.__ModuleLoader__.load({
                           { key: hook.key, className: '__dh_row' },
                           h(
                             'div',
-                            { className: '__dh_rowHead' },
-                            h('span', { className: '__dh_event' }, hook.eventName),
-                            h('span', { className: TRUST_CLASS[hook.trust] ?? '__dh_badge' }, t(hook.trust.toLowerCase())),
-                            hook.matcher
-                              ? h('span', { className: '__dh_status' }, t('matcher', { value: hook.matcher }))
-                              : null,
-                          ),
-                          h('div', { className: '__dh_desc' }, hook.description),
-                          h(
-                            'div',
-                            { className: '__dh_rowFoot' },
+                            { className: '__dh_rowMain' },
                             h(
                               'div',
-                              { className: '__dh_rowTitle' },
-                              h('div', { className: '__dh_name' }, hookTitle(hook)),
-                              h('div', { className: '__dh_status' }, t('source', { value: hook.sourcePath })),
+                              { className: '__dh_rowHead' },
+                              h('span', { className: '__dh_event' }, hook.eventName),
+                              h('span', { className: TRUST_CLASS[hook.trust] ?? '__dh_badge' }, t(hook.trust.toLowerCase())),
+                              hook.matcher
+                                ? h('span', { className: '__dh_status' }, t('matcher', { value: hook.matcher }))
+                                : null,
                             ),
-                            h(
+                            h('div', { className: '__dh_desc' }, hook.description),
+                            h('div', { className: '__dh_name' }, hookTitle(hook)),
+                            h('div', { className: '__dh_status' }, t('source', { value: hook.sourcePath })),
+                          ),
+                          h(
                               'div',
                               { className: '__dh_actions' },
                               h(
@@ -561,8 +557,7 @@ window.__ModuleLoader__.load({
                                     else setNotice(t('testFailed'))
                                   },
                                 },
-                                busy === hook.key ? t('testing') : t('test'),
-                              ),
+                              busy === hook.key ? t('testing') : t('test'),
                             ),
                           ),
                         ),
