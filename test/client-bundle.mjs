@@ -206,10 +206,28 @@ export async function runClientBundleCheck() {
     body: {},
     addEventListener() {},
     removeEventListener() {},
+    navCells: [],
+    dispatched: [],
+    querySelectorAll: () => document.navCells,
+    dispatchEvent: (event) => document.dispatched.push(event),
   }
 
   try {
-    vm.runInNewContext(readFileSync(join(ROOT, 'client.js'), 'utf8'), { window, document, console })
+    vm.runInNewContext(readFileSync(join(ROOT, 'client.js'), 'utf8'), {
+      window,
+      document,
+      console,
+      setInterval,
+      clearInterval,
+      setTimeout,
+      clearTimeout,
+      KeyboardEvent: class KeyboardEvent {
+        constructor(type, init) {
+          this.type = type
+          Object.assign(this, init)
+        }
+      },
+    })
   } catch (error) {
     push('FAIL', 'client/加载 bundle', error?.message ?? String(error))
     return items
@@ -352,13 +370,35 @@ export async function runClientBundleCheck() {
     return 'details'
   })
 
-  await check('client/提示里的「设置」链接打开钩子浏览器', async () => {
+  await check('client/提示里的「设置」链接：设置已开时点中自己的导航项', async () => {
+    let clicked = 0
+    document.navCells = [{ textContent: 'nav', closest: () => ({ click: () => (clicked += 1) }) }]
     const link = findByText(renderOverlay(), 'settingsLink')
     if (!link) throw new Error('settings link not found')
     const button = findRow(link, '__dh_link')
     if (!button) throw new Error('settings link is not a button')
     button.props.onClick()
     await settle()
+    document.navCells = []
+    if (clicked !== 1) throw new Error(`nav entry not clicked: ${clicked}`)
+    if (document.dispatched.length !== 0) throw new Error('should not need the shortcut when settings is open')
+    if (text(renderOverlay()).length !== 0) throw new Error('the dialog must close')
+    return 'nav'
+  })
+
+  await check('client/提示里的「设置」链接：设置没开时按快捷键并回退到钩子浏览器', async () => {
+    document.dispatched = []
+    findRow(renderTrigger(), '__dh_trigger').props.onClick()
+    await settle()
+    const link = findByText(renderOverlay(), 'settingsLink')
+    const button = findRow(link, '__dh_link')
+    button.props.onClick()
+    await settle()
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    await settle()
+    const shortcut = document.dispatched.find((event) => event.code === 'Comma')
+    if (!shortcut) throw new Error('settings shortcut was not dispatched')
+    if (shortcut.ctrlKey !== true) throw new Error('shortcut must carry the primary modifier')
     const rendered = text(renderOverlay()).join(' ')
     for (const needle of ['events', 'agent/pre-step', 'agent/turn-stopping']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)

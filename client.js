@@ -185,11 +185,13 @@ window.__ModuleLoader__.load({
       '.__dh_badge{border:1px solid var(--dsw-alias-state-business-primary,#3964fe);color:var(--dsw-alias-state-business-primary,#3964fe);border-radius:999px;padding:0 8px;font-size:10px;white-space:nowrap}',
       '.__dh_badgeWarn{border-color:var(--dsw-alias-state-error-primary,#f85149);color:var(--dsw-alias-state-error-primary,#f85149)}',
       '.__dh_body{border-top:1px solid var(--dsw-alias-border-l2,#dce2eb);padding:6px 12px 10px;display:flex;flex-direction:column;gap:8px}',
-      '.__dh_row{display:flex;flex-direction:column;gap:4px;padding:8px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb)}',
+      '.__dh_row{display:flex;flex-direction:column;gap:5px;padding:10px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb)}',
       '.__dh_row:last-child{border-bottom:none}',
-      '.__dh_rowHead{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}',
+      '.__dh_rowHead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
       '.__dh_event{font-weight:600;font-size:12px;flex:none;white-space:nowrap}',
-      '.__dh_desc{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.__dh_desc{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#6b7280);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.__dh_rowFoot{display:flex;align-items:center;gap:10px}',
+      '.__dh_rowTitle{flex:1;min-width:0}',
       '.__dh_name{font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.__dh_actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex:none}',
       '.__dh_btn{border:1px solid var(--dsw-alias-border-l2,#dce2eb);background:var(--dsw-alias-bg-layer-3,#f7f8fa);color:var(--dsw-alias-label-primary,#1f2328);border-radius:8px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;flex:none}',
@@ -481,11 +483,24 @@ window.__ModuleLoader__.load({
                             'div',
                             { className: '__dh_rowHead' },
                             h('span', { className: '__dh_event' }, hook.eventName),
-                            h('span', { className: '__dh_desc' }, hook.description),
+                            h('span', { className: TRUST_CLASS[hook.trust] ?? '__dh_badge' }, t(hook.trust.toLowerCase())),
+                            hook.matcher
+                              ? h('span', { className: '__dh_status' }, t('matcher', { value: hook.matcher }))
+                              : null,
+                          ),
+                          h('div', { className: '__dh_desc' }, hook.description),
+                          h(
+                            'div',
+                            { className: '__dh_rowFoot' },
                             h(
-                              'span',
+                              'div',
+                              { className: '__dh_rowTitle' },
+                              h('div', { className: '__dh_name' }, hookTitle(hook)),
+                              h('div', { className: '__dh_status' }, t('source', { value: hook.sourcePath })),
+                            ),
+                            h(
+                              'div',
                               { className: '__dh_actions' },
-                              h('span', { className: TRUST_CLASS[hook.trust] ?? '__dh_badge' }, t(hook.trust.toLowerCase())),
                               h(
                                 'label',
                                 { className: '__dh_switch' },
@@ -540,11 +555,6 @@ window.__ModuleLoader__.load({
                               ),
                             ),
                           ),
-                          h('div', { className: '__dh_name' }, hookTitle(hook)),
-                          hook.matcher
-                            ? h('div', { className: '__dh_status' }, t('matcher', { value: hook.matcher }))
-                            : null,
-                          h('div', { className: '__dh_status' }, t('source', { value: hook.sourcePath })),
                         ),
                       ),
                 )
@@ -600,6 +610,59 @@ window.__ModuleLoader__.load({
 
     function closeOverlay() {
       setUi({ view: null, eventName: null, stats: false })
+    }
+
+    // dsh publishes no API for a plugin to open a settings section, so this drives
+    // the same path a user does: click the nav entry if settings is already open,
+    // otherwise fire the settings shortcut and look for it on the next ticks.
+    // If neither lands, our own panel opens so the click is never a dead end.
+    function openSettingsSection() {
+      closeOverlay()
+      const label = translate('nav')
+      const findCell = () => {
+        if (typeof document.querySelectorAll !== 'function') return null
+        return (
+          Array.from(document.querySelectorAll('[class*="_navLabel"]')).find(
+            (node) => node.textContent?.trim() === label,
+          ) ?? null
+        )
+      }
+      const openCell = () => {
+        const cell = findCell()
+        if (!cell) return false
+        ;(cell.closest('button') ?? cell).click()
+        return true
+      }
+      const press = (altKey) => {
+        const event = new KeyboardEvent('keydown', {
+          key: ',',
+          code: 'Comma',
+          ctrlKey: true,
+          altKey,
+          bubbles: true,
+          cancelable: true,
+        })
+        document.dispatchEvent(event)
+      }
+      if (openCell()) return
+      let attempts = 0
+      const timer = setInterval(() => {
+        attempts += 1
+        if (openCell()) {
+          clearInterval(timer)
+          return
+        }
+        if (attempts === 2) press(true)
+        if (attempts >= 8) {
+          clearInterval(timer)
+          openBrowser()
+        }
+      }, 70)
+      if (typeof KeyboardEvent === 'function') press(false)
+      else {
+        clearInterval(timer)
+        openBrowser()
+      }
     }
 
     // Hooks and their trust state live on the host, so every panel that changes them
@@ -886,8 +949,7 @@ window.__ModuleLoader__.load({
                 type: 'button',
                 className: '__dh_link',
                 onClick: () => {
-                  closeOverlay()
-                  openBrowser()
+                  openSettingsSection()
                 },
               },
               t('settingsLink'),
