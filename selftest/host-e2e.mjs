@@ -121,7 +121,7 @@ check('registers the SRC descriptor on the prototype', () => {
   assert.equal(descriptor.value.version, 1)
   assert.deepEqual(
     descriptor.value.methods.map((entry) => entry.method).sort(),
-    ['list', 'setEnabled', 'setTrusted', 'testHook'],
+    ['list', 'review', 'setEnabled', 'setTrusted', 'stats', 'testHook', 'trustAll'],
   )
 })
 check('binds the hooks namespace', () => {
@@ -133,7 +133,7 @@ check('binds the hooks namespace', () => {
 check('remote methods use unique identifier parameters', () => {
   const controller = ctx.services.get('hooksController')
   const proto = Object.getPrototypeOf(controller)
-  for (const method of ['list', 'setEnabled', 'setTrusted', 'testHook']) {
+  for (const method of ['list', 'setEnabled', 'setTrusted', 'testHook', 'stats', 'review', 'trustAll']) {
     const names = proto[method].toString().match(/^[^(]*\(([^)]*)\)/)[1]
     for (const name of names.split(',').map((part) => part.trim()).filter(Boolean)) {
       assert.match(name, /^[$A-Z_a-z][$\w]*$/u, `${method}(${name}) is not a plain identifier`)
