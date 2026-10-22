@@ -54,6 +54,16 @@ async function checkAsync(name, run) {
 function createCtx() {
   const listeners = new Map()
   const services = new Map()
+  const commands = []
+  services.set('commands', {
+    register(definition) {
+      commands.push(definition)
+      return () => {
+        const index = commands.indexOf(definition)
+        if (index >= 0) commands.splice(index, 1)
+      }
+    },
+  })
   return {
     on(name, handler) {
       if (!listeners.has(name)) listeners.set(name, [])
@@ -64,9 +74,18 @@ function createCtx() {
       services.set(name, value)
       return () => services.delete(name)
     },
+    get(name) {
+      return services.get(name)
+    },
+    inject(deps, callback) {
+      const resolved = deps.map((name) => services.get(name))
+      if (resolved.every((value) => value !== undefined)) callback(...resolved)
+      return () => {}
+    },
     effect(run) {
       return run()
     },
+    commands,
     services,
     async emit(name, ...args) {
       const handlers = listeners.get(name) ?? []
@@ -123,6 +142,16 @@ check('registers the SRC descriptor on the prototype', () => {
     descriptor.value.methods.map((entry) => entry.method).sort(),
     ['list', 'review', 'setEnabled', 'setTrusted', 'stats', 'testHook', 'trustAll'],
   )
+})
+check('registers the /hooks command with the commands service', () => {
+  assert.equal(ctx.commands.length, 1, 'exactly one command')
+  const [definition] = ctx.commands
+  assert.equal(definition.name, 'hooks')
+  assert.equal(definition.definitionId, 'dsh-codex-hooks:hooks')
+  const outcome = definition.handler()
+  assert.equal(outcome.kind, 'success')
+  assert.match(outcome.text, /^Hooks: \d+ total/u)
+  assert.match(outcome.text, /Recent: \d+ runs/u)
 })
 check('binds the hooks namespace', () => {
   const controller = ctx.services.get('hooksController')
