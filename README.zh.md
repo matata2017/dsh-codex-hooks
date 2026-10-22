@@ -22,6 +22,16 @@ English: [README.md](README.md)
 
 ![设置页里的钩子列表、信任状态与操作](docs/screenshots/settings-hooks.png)
 
+截图取自本地运行的 dsh，钩子就是 `~/.dsh/hooks.json` 里那两条 `echo-hook` —— 和本仓库示例用的是同一份配置。
+
+## 兼容性
+
+| 插件版本 | 验证过的 dsh |
+| --- | --- |
+| 0.3.x | dsh `0.1.0-rc.6`（开发与自测宿主，web 与 desktop） |
+
+更新的 dsh 版本没有验证过：插件读的是 dsh 的插槽、命令与远程方法契约，宿主改掉其中任何一个，插件在跟进之前就会坏。
+
 ## 它到底做了什么
 
 - **发现**三个来源的 `hooks.json`，界面上分组显示：

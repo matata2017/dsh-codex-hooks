@@ -22,6 +22,16 @@ Everything else is managed in **Settings → Hooks**: hooks grouped by where the
 
 ![Settings page listing hooks with trust state and controls](docs/screenshots/settings-hooks.png)
 
+The screenshots come from a local dsh install running the two `echo-hook` entries in `~/.dsh/hooks.json` — the same config the examples in this repo use.
+
+## Compatibility
+
+| Plugin | Verified against |
+| --- | --- |
+| 0.3.x | dsh `0.1.0-rc.6` (development and self-test host, web + desktop) |
+
+Newer dsh releases are untested: the plugin reads dsh's slot, command and remote-method contracts, and a host that renames one of those breaks it until it is updated.
+
 ## What it actually does
 
 - **Discovers** `hooks.json` from three places, grouped in the UI:
