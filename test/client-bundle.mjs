@@ -165,18 +165,24 @@ export async function runClientBundleCheck() {
     return items
   }
 
-  const overlay = registrations.find((entry) => entry.spec.name === 'conversation.input.overlay')
-  const render = () => {
-    queue = [connection, null, FAKE_DATA, FAKE_STATS, FAKE_REVIEW.hooks, false, null, null]
-    return overlay.component({})
+  const trigger = registrations.find((entry) => entry.spec.name === 'conversation.input.left')
+  const popup = registrations.find((entry) => entry.spec.name === 'conversation.input.overlay')
+  const renderTrigger = () => {
+    queue = [connection, null, 0]
+    return trigger.component({})
+  }
+  const renderPopup = () => {
+    queue = [connection, null, FAKE_DATA, FAKE_STATS, FAKE_REVIEW.hooks, null, null]
+    return popup.component({})
   }
 
-  check('client/注册设置段与 composer overlay', () => {
-    if (!overlay) throw new Error('overlay slot not registered')
+  check('client/注册设置段、工具栏按钮与 composer 浮层', () => {
+    if (!popup) throw new Error('overlay slot not registered')
+    if (!trigger) throw new Error('composer tool row slot not registered')
     if (!registrations.find((entry) => entry.spec.name === 'settings.section')) {
       throw new Error('settings section not registered')
     }
-    return '2 slots'
+    return '3 slots'
   })
 
   check('client/为 /hooks 注册客户端动作', () => {
@@ -186,17 +192,29 @@ export async function runClientBundleCheck() {
     return 'action'
   })
 
-  check('client/待审核时渲染审核卡片', () => {
-    const rendered = text(render()).join(' ')
-    for (const needle of ['reviewTitle', 'reviewCount', 'reviewNote', 'reviewHooks', 'trustAllContinue']) {
+  check('client/输入框工具栏渲染钩子图标按钮', () => {
+    const button = findRow(renderTrigger(), '__dh_trigger')
+    if (!button) throw new Error('trigger button not rendered')
+    if (button.props['aria-label'] !== 'triggerLabel') throw new Error('trigger has no label')
+    return 'trigger'
+  })
+
+  check('client/未打开时不渲染浮层', () => {
+    if (renderPopup() !== null) throw new Error('popup rendered while closed')
+    return 'closed'
+  })
+
+  check('client/待审核时在浮层里渲染审核列表', () => {
+    decorations[0].ui.run()
+    const rendered = text(renderPopup()).join(' ')
+    for (const needle of ['reviewTitle', 'reviewCount', 'reviewNote', 'trustAllContinue', 'trust']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
     return 'card'
   })
 
   check('client//hooks 打开事件列表与运行计数', () => {
-    decorations[0].ui.run()
-    const opened = text(render()).join(' ')
+    const opened = text(renderPopup()).join(' ')
     for (const needle of ['events', 'UserPromptSubmit', 'Stop', 'runs 2', 'blocked 1']) {
       if (!opened.includes(needle)) throw new Error(`missing "${needle}" in: ${opened}`)
     }
@@ -204,10 +222,10 @@ export async function runClientBundleCheck() {
   })
 
   check('client/点事件行进入处理器列表', () => {
-    const row = findRow(render(), '__dh_listRowPick')
+    const row = findRow(renderPopup(), '__dh_listRowPick')
     if (!row) throw new Error('event row not found')
     row.props.onClick()
-    const handlers = text(render()).join(' ')
+    const handlers = text(renderPopup()).join(' ')
     if (!handlers.includes('handlers')) throw new Error(`handlers page missing: ${handlers}`)
     if (!handlers.includes('echo-hook')) throw new Error(`handler row missing: ${handlers}`)
     return 'handlers'
