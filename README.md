@@ -40,6 +40,23 @@ Default timeout is 600s, except `session/disposed` (1s default, 3s maximum) so s
 - **Hook stats in the message action row** — the assistant message action row carries a hook icon; clicking it opens a **Hook stats** dialog with `Runs / Blocked / Failed` for the last 200 executions and a *Run history* list (`Completed  agent/pre-step  User`). Hook output is *not* printed into the conversation; the model only ever sees a handler's `additionalContext`. The run log lives in memory for the session and is not written to disk.
 - **Floating panels** — every panel is rendered through a portal on `document.body` with a fixed position, so it is never clipped by the composer or the message column.
 
+### Auto-approving a tool call
+
+An `approval/request` hook can decide the pending approval itself:
+
+```json
+{
+  "hooks": {
+    "approval/request": [{ "command": "node examples/approval-allow.mjs", "timeout": 10 }]
+  }
+}
+```
+
+The hook prints `{"decision":"allow"}` to approve that one call, `{"decision":"deny","reason":"…"}`
+to refuse it, or nothing at all to let the normal prompt ask. A deny from any hook wins over an
+allow from another. `examples/approval-allow.mjs` only allows the tool named in
+`APPROVAL_ALLOW_TOOL`, because a hook that approves everything silently removes the prompt.
+
 ## Install
 
 Requires dsh `0.1.0-rc.6` or newer and Node 20+.
@@ -88,7 +105,7 @@ Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `age
 ## Verification status
 
 - `node test/run-tests.mjs` → **85 passed, 0 failed, 0 skipped**.
-- `node selftest/host-e2e.mjs` → **14 passed, 0 failed** against a real profile.
+- `node selftest/host-e2e.mjs` → **15 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 
 ## What a hook cannot do here

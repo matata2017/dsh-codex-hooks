@@ -205,6 +205,11 @@ await checkAsync('setTrusted(false) marks the hook untrusted', async () => {
   assert.equal(hook.trust, 'Untrusted')
   assert.equal(hook.runnable, false)
 })
+await checkAsync('testHook refuses an untrusted hook', async () => {
+  const result = await ctx.services.get('hooksController').testHook(hookKey)
+  assert.equal(result.ok, false)
+  assert.equal(result.needsReview, true)
+})
 await checkAsync('setTrusted(true) restores trust', async () => {
   ctx.services.get('hooksController').setTrusted(hookKey, true)
   const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === hookKey)

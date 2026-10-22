@@ -40,6 +40,23 @@ English: [README.md](README.md)
 - **消息操作行的钩子图标 → 钩子统计弹窗** —— 助手消息的操作行有一个钩子图标，点开是统计弹窗：最近 200 次执行的 `运行 / 拦截 / 失败` 计数，以及*运行历史*列表（形如 `Completed  agent/pre-step  User`）。钩子输出**不会**打印进对话，模型只会看到处理器的 `additionalContext`。运行记录只放在内存里，不落盘。
 - **浮层**：所有面板都用 portal 渲到 `document.body` 上并固定定位，不会被输入框或消息列裁掉。
 
+### 自动放行一次工具调用
+
+`approval/request` 钩子可以自己决定待审批的那次调用：
+
+```json
+{
+  "hooks": {
+    "approval/request": [{ "command": "node examples/approval-allow.mjs", "timeout": 10 }]
+  }
+}
+```
+
+钩子打印 `{"decision":"allow"}` 就是放行这一次；打印 `{"decision":"deny","reason":"…"}` 是拒绝；
+什么都不打印就交回正常的审批提示。任一钩子 deny 压过别的钩子的 allow。
+`examples/approval-allow.mjs` 只放行 `APPROVAL_ALLOW_TOOL` 指定的那个工具——把什么都放行的钩子，
+等于把你装钩子本来想收紧的那道提示给拆了。
+
 ## 安装
 
 需要 dsh `0.1.0-rc.6` 或更新版本，Node 20+。
@@ -88,7 +105,7 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 ## 验证状态
 
 - `node test/run-tests.mjs` → **85 passed, 0 failed, 0 skipped**。
-- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **14 passed, 0 failed**。
+- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **15 passed, 0 failed**。
 - `agent/pre-step` 在真实 dsh 会话里跑通：每提交一次提示，示例钩子打印一行 `echo-hook received event=…`。
 
 ## 这里做不到的事
