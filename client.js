@@ -1,5 +1,15 @@
+// ponytail: the host's boot manifest keeps the package id it composed when the
+// host process started. After a rename the manifest still advertises the old id,
+// and a bundle that declares a different one never activates. Adopt the id the
+// manifest advertises for us; drop this once every host restarts on >=0.1.0.
+const SELF_ID = (() => {
+  const entries = (typeof window !== 'undefined' && window.__DSH_BOOT__?.entries) || []
+  const row = entries.find((entry) => typeof entry?.id === 'string' && /dsh-(?:codex-)?hooks$/.test(entry.id))
+  return row?.id ?? 'dsh-codex-hooks'
+})()
+
 window.__ModuleLoader__.load({
-  id: 'dsh-codex-hooks',
+  id: SELF_ID,
   factory: (require) => {
     const React = require('react')
     const h = React.createElement
