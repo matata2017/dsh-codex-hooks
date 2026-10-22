@@ -1,7 +1,7 @@
 {
   "name": "dsh-codex-hooks",
-  "version": "0.1.0",
-  "description": "Codex-compatible lifecycle hooks for DeepSeek Harness: discover hooks.json files, review each hook's sha256 trust fingerprint, run the trusted ones, and manage everything from a Hooks settings section.",
+  "version": "0.2.0",
+  "description": "Lifecycle hooks for DeepSeek Harness: discover hooks.json from config, plugins and projects, review each hook sha256 trust fingerprint, run the trusted ones, and manage everything from a Hooks settings section.",
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -104,26 +104,22 @@ function createCtx() {
 /* ---------------- fixtures ---------------- */
 
 const hooksFile = {
+  version: 1,
   hooks: {
-    UserPromptSubmit: [
-      {
-        hooks: [{ type: 'command', command: `node "${fixture}"`, statusMessage: 'selftest hook' }],
-      },
-    ],
+    'agent/pre-step': [{ command: `node "${fixture}"`, statusMessage: 'selftest hook' }],
   },
 }
 writeFileSync(join(home, 'hooks.json'), JSON.stringify(hooksFile), 'utf8')
 
 const sourceKey = join(home, 'hooks.json')
-const stateKey = core.hookStateKey(sourceKey, 'UserPromptSubmit', 0, 0)
-const trustedHash = core.hookHash({
-  eventName: 'UserPromptSubmit',
-  matcher: null,
-  handler: hooksFile.hooks.UserPromptSubmit[0].hooks[0],
+// Trust the hook the same way discovery sees it: parse, then hash the parsed row.
+const [discovered] = core.describeHooks(core.parseHooksFile(JSON.stringify(hooksFile)), {
+  sourceKey,
   platform: process.platform,
 })
+const hookKey = discovered.key
 core.writeStateFile(join(home, 'hooks.state.json'), {
-  states: { [stateKey]: { enabled: true, trustedHash } },
+  states: { [hookKey]: { enabled: true, trustedHash: discovered.hash } },
 })
 
 /* ---------------- run the plugin ---------------- */
@@ -182,36 +178,36 @@ await checkAsync('list() returns the discovered hook', async () => {
   assert.equal(catalog.groups.length, 3)
   const group = catalog.groups.find((entry) => entry.id === 'config')
   assert.ok(group, 'config group missing')
-  const hook = group.hooks.find((entry) => entry.key === stateKey)
+  const hook = group.hooks.find((entry) => entry.key === hookKey)
   assert.ok(hook, 'hook missing')
   assert.equal(hook.trust, 'Trusted')
   assert.equal(hook.enabled, true)
   assert.equal(hook.runnable, true)
 })
 await checkAsync('setEnabled() writes the state file', async () => {
-  const result = ctx.services.get('hooksController').setEnabled(stateKey, false)
+  const result = ctx.services.get('hooksController').setEnabled(hookKey, false)
   assert.equal(result.ok, true)
   const state = JSON.parse(readFileSync(join(home, 'hooks.state.json'), 'utf8'))
-  assert.equal(state.states[stateKey].enabled, false)
-  const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === stateKey)
+  assert.equal(state.states[hookKey].enabled, false)
+  const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === hookKey)
   assert.equal(hook.enabled, false)
   assert.equal(hook.runnable, false)
 })
 await checkAsync('setEnabled(true) restores the hook', async () => {
-  ctx.services.get('hooksController').setEnabled(stateKey, true)
-  const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === stateKey)
+  ctx.services.get('hooksController').setEnabled(hookKey, true)
+  const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === hookKey)
   assert.equal(hook.enabled, true)
 })
 await checkAsync('setTrusted(false) marks the hook untrusted', async () => {
-  const result = ctx.services.get('hooksController').setTrusted(stateKey, false)
+  const result = ctx.services.get('hooksController').setTrusted(hookKey, false)
   assert.equal(result.ok, true)
-  const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === stateKey)
+  const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === hookKey)
   assert.equal(hook.trust, 'Untrusted')
   assert.equal(hook.runnable, false)
 })
 await checkAsync('setTrusted(true) restores trust', async () => {
-  ctx.services.get('hooksController').setTrusted(stateKey, true)
-  const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === stateKey)
+  ctx.services.get('hooksController').setTrusted(hookKey, true)
+  const hook = ctx.services.get('hooksController').list().hooks.find((entry) => entry.key === hookKey)
   assert.equal(hook.trust, 'Trusted')
 })
 
@@ -229,22 +225,22 @@ await checkAsync('agent/pre-step runs the hook and injects the context', async (
   assert.equal(decision.messages.length, 2)
   assert.match(decision.messages[1].content[0].text, /selftest additional context/)
 })
-check('the hook received a Codex shaped payload', () => {
+check('the hook received a DSH shaped payload', () => {
   assert.ok(existsSync(process.env.DSH_HOOKS_SELFTEST_OUT), 'hook did not run')
   const received = JSON.parse(readFileSync(process.env.DSH_HOOKS_SELFTEST_OUT, 'utf8'))
-  assert.equal(received.hook_event_name, 'UserPromptSubmit')
+  assert.equal(received.hook_event_name, 'agent/pre-step')
   assert.equal(received.prompt, 'hello hooks')
   assert.equal(received.cwd, workspace)
   assert.equal(received.session_id, 'session-1')
   assert.equal(received.turn_id, 'turn-1')
 })
 await checkAsync('testHook() runs the hook on demand', async () => {
-  const result = await ctx.services.get('hooksController').testHook(stateKey)
+  const result = await ctx.services.get('hooksController').testHook(hookKey)
   assert.equal(result.ok, true)
   assert.equal(result.status, 'ok')
 })
 await checkAsync('untrusted hooks are not executed', async () => {
-  ctx.services.get('hooksController').setTrusted(stateKey, false)
+  ctx.services.get('hooksController').setTrusted(hookKey, false)
   const agent = {
     id: 'agent-2',
     type: 'main',

@@ -1,31 +1,22 @@
 {
-  "description": "DSH Hooks plugin - echo demo (CODEX compatible)",
+  "version": 1,
+  "description": "dsh-hooks echo demo: put a copy in $DSH_HOME/hooks.json",
   "hooks": {
-    "UserPromptSubmit": [
+    "agent/pre-step": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"D:/work/huanghao/dsh-hoos/examples/echo-hook.mjs\"",
-            "commandWindows": "node.exe \"D:/work/huanghao/dsh-hoos/examples/echo-hook.mjs\"",
-            "timeout": 15,
-            "statusMessage": "echo-hook: echoing the prompt"
-          }
-        ]
+        "command": "node \"D:/work/huanghao/dsh-hoos/examples/echo-hook.mjs\"",
+        "commandWindows": "node.exe \"D:/work/huanghao/dsh-hoos/examples/echo-hook.mjs\"",
+        "timeout": 15,
+        "statusMessage": "echo-hook: echoing the prompt"
       }
     ],
-    "PreToolUse": [
+    "tools/pre-execute": [
       {
         "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"D:/work/huanghao/dsh-hoos/examples/echo-hook.mjs\"",
-            "commandWindows": "node.exe \"D:/work/huanghao/dsh-hoos/examples/echo-hook.mjs\"",
-            "timeout": 15,
-            "statusMessage": "echo-hook: inspecting the tool call"
-          }
-        ]
+        "command": "node \"D:/work/huanghao/dsh-hoos/examples/echo-hook.mjs\"",
+        "commandWindows": "node.exe \"D:/work/huanghao/dsh-hoos/examples/echo-hook.mjs\"",
+        "timeout": 15,
+        "statusMessage": "echo-hook: inspecting the tool call"
       }
     ]
   }

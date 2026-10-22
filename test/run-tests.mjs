@@ -10,13 +10,14 @@
  * Exit code 2  = the test harness itself could not run (missing files, bad JSON).
  *
  * Sections
- *   A  信任哈希 — 8 real CODEX vectors (read back from the installed Codex CLI state file)
- *   B  hooks.json 解析 — schema, normalization, timeout / additionalContextLimit rules
+ *   A  信任哈希 — stable sha256 fingerprint, one changed character changes it
+ *   B  hooks.json 解析 — DSH schema, normalization, timeout / additionalContextLimit rules
  *   C  matcher — '*' / 精确 / '|' 多选 / 正则
  *   D  状态文件读写 + 四种信任状态
  *   E  hook 输出 JSON 解析 + 退出码语义
  *   F  examples/echo-hook.mjs 端到端（stdin → stdout → exit 2）
- *   G  插件一致性探针 — 对照 lib/core.js（未实现时 SKIP）
+ *   G  运行记录与 /hooks 文本（lib/runs.js）
+ *   H  客户端 bundle 渲染（test/client-bundle.mjs）
  */
 
 import { spawn } from 'node:child_process'
@@ -25,16 +26,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import * as spec from './spec.mjs'
-import { runConformance, runConformanceSelfTest } from './plugin-conformance.mjs'
+import * as spec from '../lib/core.js'
 import { runClientBundleCheck } from './client-bundle.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const ECHO_HOOK = join(ROOT, 'examples', 'echo-hook.mjs')
 const QUIET = process.argv.includes('--quiet')
-
-const vectors = JSON.parse(readFileSync(join(HERE, 'vectors.json'), 'utf8'))
 
 const results = []
 let currentSection = ''
@@ -83,118 +81,77 @@ function assertThrows(fn, message, pattern) {
 }
 
 // ---------------------------------------------------------------------------
-// A. 信任哈希：与真实 CODEX 向量逐条比对
 // ---------------------------------------------------------------------------
-section('A. 信任哈希 vs 真实 CODEX 向量')
-for (const vector of vectors.hashVectors) {
-  test(`hash/${vector.name}`, () => {
-    const actual = spec.hookHash({
-      eventName: vector.event,
-      matcher: vector.matcher,
-      handler: vector.handler,
-      platform: vector.platform,
-    })
-    assertEqual(actual, vector.trustedHash, `hash mismatch for ${vector.name}`)
-    return actual
-  })
-}
+// A. 信任哈希：归一化后算 sha256，改一处即变
+// ---------------------------------------------------------------------------
+section('A. 信任哈希')
+
+const baseHook = { type: 'command', command: 'node hook.mjs', timeout: 15, statusMessage: 'checking' }
+
+test('hash/同一钩子两次哈希一致且是 sha256 指纹', () => {
+  const first = spec.hookHash({ eventName: 'agent/pre-step', handler: baseHook })
+  const second = spec.hookHash({ eventName: 'agent/pre-step', handler: { ...baseHook } })
+  assertEqual(first, second, 'hash must be stable')
+  assert(/^sha256:[0-9a-f]{64}$/.test(first), `not a sha256 fingerprint: ${first}`)
+  return first.slice(0, 19)
+})
 
 test('hash/负控：改一个字符即变哈希', () => {
-  const vector = vectors.hashVectors[0]
-  // mutate the field the platform actually uses, otherwise the change is invisible
-  const key = vector.platform === 'win32' && vector.handler.commandWindows ? 'commandWindows' : 'command'
-  const mutated = { ...vector.handler, [key]: `${vector.handler[key]} ` }
-  const original = spec.hookHash({
-    eventName: vector.event,
-    matcher: vector.matcher,
-    handler: vector.handler,
-    platform: vector.platform,
-  })
-  const changed = spec.hookHash({
-    eventName: vector.event,
-    matcher: vector.matcher,
-    handler: mutated,
-    platform: vector.platform,
-  })
-  assert(original !== changed, `mutating ${key} produced the same hash`)
-  return `mutation of ${key} detected`
+  const original = spec.hookHash({ eventName: 'agent/pre-step', handler: baseHook })
+  const changed = spec.hookHash({ eventName: 'agent/pre-step', handler: { ...baseHook, command: 'node hook.mjs ' } })
+  assert(original !== changed, 'mutating command produced the same hash')
+  return 'mutation detected'
 })
 
 test('hash/负控：平台影响 commandWindows 选择', () => {
-  const withWindows = vectors.hashVectors.find((v) => v.handler.commandWindows)
-  assert(withWindows, 'no vector with commandWindows')
-  const win = spec.hookHash({
-    eventName: withWindows.event,
-    matcher: withWindows.matcher,
-    handler: withWindows.handler,
-    platform: 'win32',
-  })
-  const linux = spec.hookHash({
-    eventName: withWindows.event,
-    matcher: withWindows.matcher,
-    handler: withWindows.handler,
-    platform: 'linux',
-  })
+  const handler = { type: 'command', command: 'node a.js', commandWindows: 'node.exe a.js' }
+  const win = spec.hookHash({ eventName: 'tools/pre-execute', handler, platform: 'win32' })
+  const linux = spec.hookHash({ eventName: 'tools/pre-execute', handler, platform: 'linux' })
   assert(win !== linux, 'commandWindows was ignored on win32')
   return 'win32 != linux'
 })
 
-test('hash/负控：matcher 参与哈希', () => {
-  const vector = vectors.hashVectors.find((v) => v.matcher)
-  assert(vector, 'no vector with a matcher')
-  const withMatcher = spec.hookHash({
-    eventName: vector.event,
-    matcher: vector.matcher,
-    handler: vector.handler,
-    platform: vector.platform,
-  })
-  const withoutMatcher = spec.hookHash({
-    eventName: vector.event,
-    matcher: null,
-    handler: vector.handler,
-    platform: vector.platform,
-  })
+test('hash/负控：matcher 只在支持 matcher 的事件上参与哈希', () => {
+  const withMatcher = spec.hookHash({ eventName: 'tools/pre-execute', matcher: 'Bash', handler: baseHook })
+  const withoutMatcher = spec.hookHash({ eventName: 'tools/pre-execute', matcher: null, handler: baseHook })
   assert(withMatcher !== withoutMatcher, 'matcher did not change the hash')
+  const promptA = spec.hookHash({ eventName: 'agent/pre-step', matcher: 'Bash', handler: baseHook })
+  const promptB = spec.hookHash({ eventName: 'agent/pre-step', matcher: null, handler: baseHook })
+  assertEqual(promptA, promptB, 'agent/pre-step has no matcher, so the hash must not change')
   return 'matcher is part of the identity'
 })
 
 test('state-key/格式 <path>:<event>:<group>:<handler>', () => {
-  const key = spec.hookStateKey('C:\\Users\\Admin\\.codex\\hooks.json', 'UserPromptSubmit', 0, 0)
-  assertEqual(key, 'C:\\Users\\Admin\\.codex\\hooks.json:user_prompt_submit:0:0', 'state key format')
-  const vector = vectors.hashVectors[0]
-  assertEqual(vector.stateKey, key, 'vector state key mismatch')
+  const key = spec.hookStateKey('C:\\Users\\Admin\\.dsh\\hooks.json', 'agent/pre-step', 0, 0)
+  assertEqual(key, 'C:\\Users\\Admin\\.dsh\\hooks.json:agent_pre_step:0:0', 'state key format')
   return key
 })
 
 // ---------------------------------------------------------------------------
-// B. hooks.json 解析
+// B. hooks.json 解析（DSH 自己的格式）
 // ---------------------------------------------------------------------------
 section('B. hooks.json 解析')
 
 const validDoc = {
+  version: 1,
   description: 'demo',
   hooks: {
-    PreToolUse: [
+    'tools/pre-execute': [
       {
         matcher: '^Bash$',
-        hooks: [
-          {
-            type: 'command',
-            command: 'python3 /tmp/pre.py',
-            timeout: 10,
-            statusMessage: 'checking',
-            additionalContextLimit: 4096,
-          },
-        ],
+        command: 'python3 /tmp/pre.py',
+        timeout: 10,
+        statusMessage: 'checking',
+        additionalContextLimit: 4096,
       },
     ],
   },
 }
 
-test('parse/合法文件（codex-rs/config/src/hooks_tests.rs 向量）', () => {
+test('parse/合法文件（每行一个 hook，带命令与 matcher）', () => {
   const parsed = spec.parseHooksFile(JSON.stringify(validDoc))
   assertEqual(parsed.description, 'demo', 'description')
-  const group = parsed.events.PreToolUse[0]
+  const group = parsed.events['tools/pre-execute'][0]
   assertEqual(group.matcher, '^Bash$', 'matcher')
   assertEqual(group.hooks.length, 1, 'handler count')
   assertEqual(group.hooks[0].command, 'python3 /tmp/pre.py', 'command')
@@ -203,20 +160,23 @@ test('parse/合法文件（codex-rs/config/src/hooks_tests.rs 向量）', () => 
   return 'ok'
 })
 
-test('parse/顶层事件键被拒绝（unknown field `PreToolUse`）', () => {
+test('parse/事件名必须用 DSH 的事件，Codex 的名字被拒绝', () => {
   assertThrows(
-    () => spec.parseHooksFile(JSON.stringify({ PreToolUse: validDoc.hooks.PreToolUse })),
-    'top-level event key must be rejected',
-    /unknown field/,
+    () => spec.parseHooksFile(JSON.stringify({ hooks: { PreToolUse: [{ command: 'x' }] } })),
+    'a Codex event name must be rejected',
+    /unknown event/,
   )
   return 'rejected'
 })
 
-test('parse/未知事件名被拒绝', () => {
+test('parse/Codex 的 matcher 分组形状被拒绝并给出迁移提示', () => {
   assertThrows(
-    () => spec.parseHooksFile(JSON.stringify({ hooks: { NotAnEvent: [] } })),
-    'unknown event must be rejected',
-    /unknown field/,
+    () =>
+      spec.parseHooksFile(
+        JSON.stringify({ hooks: { 'tools/pre-execute': [{ matcher: '*', hooks: [{ type: 'command', command: 'x' }] }] } }),
+      ),
+    'a matcher group must be rejected',
+    /matcher group/,
   )
   return 'rejected'
 })
@@ -232,63 +192,64 @@ test('parse/未知顶层字段被拒绝', () => {
 
 test('parse/未知 handler type 被拒绝', () => {
   assertThrows(
-    () => spec.parseHooksFile(JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'wat' }] }] } })),
+    () => spec.parseHooksFile(JSON.stringify({ hooks: { 'agent/turn-stopping': [{ type: 'wat', command: 'x' }] } })),
     'unknown handler type must be rejected',
     /must be one of/,
   )
   return 'rejected'
 })
 
-test('parse/command handler 缺 command 被拒绝', () => {
+test('parse/command 缺失被拒绝', () => {
   assertThrows(
-    () => spec.parseHooksFile(JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command' }] }] } })),
-    'command handler without command must be rejected',
+    () => spec.parseHooksFile(JSON.stringify({ hooks: { 'agent/turn-stopping': [{ type: 'command' }] } })),
+    'command hook without command must be rejected',
     /command/,
   )
   return 'rejected'
 })
 
-test('parse/mcp_tool handler 缺 server 被拒绝', () => {
+test('parse/mcp_tool 缺 server 被拒绝', () => {
   assertThrows(
-    () => spec.parseHooksFile(JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'mcp_tool', tool: 'x' }] }] } })),
-    'mcp_tool handler without server must be rejected',
+    () =>
+      spec.parseHooksFile(JSON.stringify({ hooks: { 'agent/turn-stopping': [{ type: 'mcp_tool', tool: 'x' }] } })),
+    'mcp_tool without server must be rejected',
     /server/,
   )
   return 'rejected'
 })
 
+test('parse/缺省 type 视为 command', () => {
+  const parsed = spec.parseHooksFile(JSON.stringify({ hooks: { 'agent/pre-step': [{ command: 'node x.mjs' }] } }))
+  assertEqual(parsed.events['agent/pre-step'][0].hooks[0].type, 'command', 'default type')
+  return 'command'
+})
+
 test('normalize/timeout 默认 600', () => {
-  const handler = spec.normalizeHandler({ type: 'command', command: 'x' }, { eventName: 'PreToolUse' })
+  const handler = spec.normalizeHandler({ type: 'command', command: 'x' }, { eventName: 'tools/pre-execute' })
   assertEqual(handler.timeout, 600, 'default timeout')
   return '600'
 })
 
 test('normalize/timeout 下限 1', () => {
-  const handler = spec.normalizeHandler({ type: 'command', command: 'x', timeout: 0 }, { eventName: 'PreToolUse' })
+  const handler = spec.normalizeHandler({ type: 'command', command: 'x', timeout: 0 }, { eventName: 'tools/pre-execute' })
   assertEqual(handler.timeout, 1, 'timeout floor')
   return '1'
 })
 
-test('normalize/SessionEnd timeout 夹到 [1,3]', () => {
-  const high = spec.normalizeHandler({ type: 'command', command: 'x', timeout: 60 }, { eventName: 'SessionEnd' })
-  assertEqual(high.timeout, 3, 'SessionEnd upper clamp')
-  const low = spec.normalizeHandler({ type: 'command', command: 'x', timeout: 0 }, { eventName: 'SessionEnd' })
-  assertEqual(low.timeout, 1, 'SessionEnd lower clamp')
-  const none = spec.normalizeHandler({ type: 'command', command: 'x' }, { eventName: 'SessionEnd' })
-  assertEqual(none.timeout, 1, 'SessionEnd default')
+test('normalize/session/disposed timeout 夹到 [1,3]', () => {
+  const high = spec.normalizeHandler({ type: 'command', command: 'x', timeout: 60 }, { eventName: 'session/disposed' })
+  assertEqual(high.timeout, 3, 'upper clamp')
+  const low = spec.normalizeHandler({ type: 'command', command: 'x', timeout: 0 }, { eventName: 'session/disposed' })
+  assertEqual(low.timeout, 1, 'lower clamp')
+  const none = spec.normalizeHandler({ type: 'command', command: 'x' }, { eventName: 'session/disposed' })
+  assertEqual(none.timeout, 1, 'default')
   return '1..3'
-})
-
-test('normalize/Interrupt timeout 夹到 [1,3]', () => {
-  const handler = spec.normalizeHandler({ type: 'command', command: 'x', timeout: 30 }, { eventName: 'Interrupt' })
-  assertEqual(handler.timeout, 3, 'Interrupt clamp')
-  return '3'
 })
 
 test('normalize/additionalContextLimit=2500 被丢弃', () => {
   const handler = spec.normalizeHandler(
     { type: 'command', command: 'x', additionalContextLimit: 2500 },
-    { eventName: 'PreToolUse' },
+    { eventName: 'tools/pre-execute' },
   )
   assert(!('additionalContextLimit' in handler), '2500 must be dropped')
   return 'dropped'
@@ -297,7 +258,7 @@ test('normalize/additionalContextLimit=2500 被丢弃', () => {
 test('normalize/additionalContextLimit=4096 在允许的事件里保留', () => {
   const handler = spec.normalizeHandler(
     { type: 'command', command: 'x', additionalContextLimit: 4096 },
-    { eventName: 'PreToolUse' },
+    { eventName: 'tools/pre-execute' },
   )
   assertEqual(handler.additionalContextLimit, 4096, 'limit kept')
   return '4096'
@@ -306,46 +267,46 @@ test('normalize/additionalContextLimit=4096 在允许的事件里保留', () => 
 test('normalize/additionalContextLimit 在非允许事件里丢弃', () => {
   const handler = spec.normalizeHandler(
     { type: 'command', command: 'x', additionalContextLimit: 4096 },
-    { eventName: 'Stop' },
+    { eventName: 'agent/turn-stopping' },
   )
-  assert(!('additionalContextLimit' in handler), 'limit must be dropped for Stop')
+  assert(!('additionalContextLimit' in handler), 'limit must be dropped for agent/turn-stopping')
   return 'dropped'
 })
 
 test('normalize/win32 优先 commandWindows', () => {
   const handler = spec.normalizeHandler(
     { type: 'command', command: 'node a.js', commandWindows: 'node.exe a.js' },
-    { eventName: 'PreToolUse', platform: 'win32' },
+    { eventName: 'tools/pre-execute', platform: 'win32' },
   )
   assertEqual(handler.command, 'node.exe a.js', 'win32 command')
   const linux = spec.normalizeHandler(
     { type: 'command', command: 'node a.js', commandWindows: 'node.exe a.js' },
-    { eventName: 'PreToolUse', platform: 'linux' },
+    { eventName: 'tools/pre-execute', platform: 'linux' },
   )
   assertEqual(linux.command, 'node a.js', 'linux command')
   return 'win32 uses commandWindows'
 })
 
 test('normalize/prompt 与 agent 类型不产生哈希', () => {
-  assertEqual(spec.normalizeHandler({ type: 'prompt' }, { eventName: 'PreToolUse' }), null, 'prompt')
-  assertEqual(spec.normalizeHandler({ type: 'agent' }, { eventName: 'PreToolUse' }), null, 'agent')
-  return 'skipped like CODEX'
+  assertEqual(spec.normalizeHandler({ type: 'prompt' }, { eventName: 'tools/pre-execute' }), null, 'prompt')
+  assertEqual(spec.normalizeHandler({ type: 'agent' }, { eventName: 'tools/pre-execute' }), null, 'agent')
+  return 'skipped'
 })
 
 test('describe/遍历顺序与 state key', () => {
   const parsed = spec.parseHooksFile(
     JSON.stringify({
       hooks: {
-        Stop: [{ hooks: [{ type: 'command', command: 'a' }, { type: 'command', command: 'b' }] }],
-        PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'c' }] }],
+        'agent/turn-stopping': [{ command: 'a' }, { command: 'b' }],
+        'tools/pre-execute': [{ matcher: '*', command: 'c' }],
       },
     }),
   )
   const entries = spec.describeHooks(parsed, { sourceKey: 'C:/x/hooks.json', platform: 'linux' })
   assertEqual(entries.length, 3, 'entry count')
-  assertEqual(entries[0].key, 'C:/x/hooks.json:pre_tool_use:0:0', 'first key')
-  assertEqual(entries[1].key, 'C:/x/hooks.json:stop:0:0', 'second key')
-  assertEqual(entries[2].key, 'C:/x/hooks.json:stop:0:1', 'third key')
+  assertEqual(entries[0].key, 'C:/x/hooks.json:tools_pre_execute:0:0', 'first key')
+  assertEqual(entries[1].key, 'C:/x/hooks.json:agent_turn_stopping:0:0', 'second key')
+  assertEqual(entries[2].key, 'C:/x/hooks.json:agent_turn_stopping:1:0', 'third key')
   return '3 entries'
 })
 
@@ -383,14 +344,16 @@ test('matcher/正则', () => {
   return 'ok'
 })
 
-test('matcher/非 matcher 事件强制 All', () => {
+test('matcher/只有工具类 seam 支持 matcher', () => {
   const compiled = spec.compileMatcher('Bash')
   assertEqual(compiled.kind, 'exact', 'classification')
-  assert(spec.MATCHER_EVENTS.has('PreToolUse'), 'PreToolUse supports matcher')
-  assert(!spec.MATCHER_EVENTS.has('UserPromptSubmit'), 'UserPromptSubmit has no matcher')
-  assert(!spec.MATCHER_EVENTS.has('Stop'), 'Stop has no matcher')
-  assertEqual(spec.MATCHER_EVENTS.size, 9, '9 events support a matcher')
-  return '9 matcher events'
+  assert(spec.MATCHER_EVENTS.has('tools/pre-execute'), 'tools/pre-execute supports a matcher')
+  assert(spec.MATCHER_EVENTS.has('tools/post-execute'), 'tools/post-execute supports a matcher')
+  assert(spec.MATCHER_EVENTS.has('approval/request'), 'approval/request supports a matcher')
+  assert(!spec.MATCHER_EVENTS.has('agent/pre-step'), 'agent/pre-step takes no matcher')
+  assert(!spec.MATCHER_EVENTS.has('agent/turn-stopping'), 'agent/turn-stopping takes no matcher')
+  assertEqual(spec.MATCHER_EVENTS.size, 3, '3 seams support a matcher')
+  return '3 matcher seams'
 })
 
 test('matcher/精确与正则在缺 input 时不匹配', () => {
@@ -511,7 +474,7 @@ test('output/通用字段全量解析', () => {
       systemMessage: 'heads up',
       suppressOutput: true,
     }),
-    { eventName: 'Stop' },
+    { eventName: 'agent/turn-stopping' },
   )
   assertEqual(parsed.continue, false, 'continue')
   assertEqual(parsed.stopReason, 'stopped by hook', 'stopReason')
@@ -521,7 +484,7 @@ test('output/通用字段全量解析', () => {
 })
 
 test('output/缺省值 continue=true suppressOutput=false', () => {
-  const parsed = spec.parseHookOutput('{}', { eventName: 'Stop' })
+  const parsed = spec.parseHookOutput('{}', { eventName: 'agent/turn-stopping' })
   assertEqual(parsed.continue, true, 'default continue')
   assertEqual(parsed.suppressOutput, false, 'default suppressOutput')
   assertEqual(parsed.decision, null, 'default decision')
@@ -529,16 +492,16 @@ test('output/缺省值 continue=true suppressOutput=false', () => {
 })
 
 test('output/decision=block 必须带非空 reason', () => {
-  const good = spec.parseHookOutput(JSON.stringify({ decision: 'block', reason: 'nope' }), { eventName: 'PreToolUse' })
+  const good = spec.parseHookOutput(JSON.stringify({ decision: 'block', reason: 'nope' }), { eventName: 'tools/pre-execute' })
   assertEqual(good.decision, 'block', 'decision')
   assertEqual(good.invalidReason, null, 'no invalid reason')
-  const bad = spec.parseHookOutput(JSON.stringify({ decision: 'block' }), { eventName: 'PreToolUse' })
+  const bad = spec.parseHookOutput(JSON.stringify({ decision: 'block' }), { eventName: 'tools/pre-execute' })
   assert(bad.invalidReason && /non-empty reason/.test(bad.invalidReason), 'missing reason must be flagged')
   return 'ok'
 })
 
 test('output/未知字段 → 解析失败', () => {
-  assertEqual(spec.parseHookOutput(JSON.stringify({ nope: 1 }), { eventName: 'Stop' }), null, 'unknown field')
+  assertEqual(spec.parseHookOutput(JSON.stringify({ nope: 1 }), { eventName: 'agent/turn-stopping' }), null, 'unknown field')
   return 'null'
 })
 
@@ -546,9 +509,9 @@ test('output/按事件限定字段（Stop 不接受 hookSpecificOutput）', () =
   const withSpecific = JSON.stringify({
     hookSpecificOutput: { hookEventName: 'Stop', additionalContext: 'x' },
   })
-  assertEqual(spec.parseHookOutput(withSpecific, { eventName: 'Stop' }), null, 'Stop rejects hookSpecificOutput')
-  const userPrompt = spec.parseHookOutput(withSpecific, { eventName: 'UserPromptSubmit' })
-  assert(userPrompt !== null, 'UserPromptSubmit accepts hookSpecificOutput')
+  assertEqual(spec.parseHookOutput(withSpecific, { eventName: 'agent/turn-stopping' }), null, 'Stop rejects hookSpecificOutput')
+  const userPrompt = spec.parseHookOutput(withSpecific, { eventName: 'agent/pre-step' })
+  assert(userPrompt !== null, 'agent/pre-step accepts hookSpecificOutput')
   assertEqual(userPrompt.additionalContext, 'x', 'additionalContext')
   return 'ok'
 })
@@ -556,7 +519,7 @@ test('output/按事件限定字段（Stop 不接受 hookSpecificOutput）', () =
 test('output/hookSpecificOutput 必须带 hookEventName', () => {
   const parsed = spec.parseHookOutput(
     JSON.stringify({ hookSpecificOutput: { additionalContext: 'x' } }),
-    { eventName: 'UserPromptSubmit' },
+    { eventName: 'agent/pre-step' },
   )
   assertEqual(parsed, null, 'missing hookEventName')
   return 'null'
@@ -564,29 +527,29 @@ test('output/hookSpecificOutput 必须带 hookEventName', () => {
 
 test('output/additionalContext 必须是字符串', () => {
   const parsed = spec.parseHookOutput(
-    JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 42 } }),
-    { eventName: 'UserPromptSubmit' },
+    JSON.stringify({ hookSpecificOutput: { hookEventName: 'agent/pre-step', additionalContext: 42 } }),
+    { eventName: 'agent/pre-step' },
   )
   assertEqual(parsed, null, 'non-string additionalContext')
   return 'null'
 })
 
-test('output/Interrupt 只接受 systemMessage', () => {
-  assertEqual(spec.parseHookOutput(JSON.stringify({ continue: true }), { eventName: 'Interrupt' }), null, 'continue rejected')
-  const ok = spec.parseHookOutput(JSON.stringify({ systemMessage: 'hi' }), { eventName: 'Interrupt' })
+test('output/session/disposed 只接受 systemMessage', () => {
+  assertEqual(spec.parseHookOutput(JSON.stringify({ continue: true }), { eventName: 'session/disposed' }), null, 'continue rejected')
+  const ok = spec.parseHookOutput(JSON.stringify({ systemMessage: 'hi' }), { eventName: 'session/disposed' })
   assertEqual(ok.systemMessage, 'hi', 'systemMessage')
   return 'ok'
 })
 
 test('run/exit 0 + 空 stdout → 成功无操作', () => {
-  const result = spec.classifyRun({ exitCode: 0, stdout: '', stderr: '' }, { eventName: 'Stop' })
+  const result = spec.classifyRun({ exitCode: 0, stdout: '', stderr: '' }, { eventName: 'agent/turn-stopping' })
   assertEqual(result.status, 'ok', 'status')
   assertEqual(result.output, null, 'no output')
   return 'ok'
 })
 
 test('run/exit 0 + 纯文本 → 当作 additionalContext', () => {
-  const result = spec.classifyRun({ exitCode: 0, stdout: 'hello context', stderr: '' }, { eventName: 'Stop' })
+  const result = spec.classifyRun({ exitCode: 0, stdout: 'hello context', stderr: '' }, { eventName: 'agent/turn-stopping' })
   assertEqual(result.status, 'ok', 'status')
   assertEqual(result.additionalContext, 'hello context', 'additionalContext')
   return 'ok'
@@ -595,7 +558,7 @@ test('run/exit 0 + 纯文本 → 当作 additionalContext', () => {
 test('run/exit 0 + JSON → 按 schema 解析', () => {
   const result = spec.classifyRun(
     { exitCode: 0, stdout: JSON.stringify({ systemMessage: 'warn' }), stderr: '' },
-    { eventName: 'Stop' },
+    { eventName: 'agent/turn-stopping' },
   )
   assertEqual(result.status, 'ok', 'status')
   assertEqual(result.output.systemMessage, 'warn', 'systemMessage')
@@ -603,28 +566,28 @@ test('run/exit 0 + JSON → 按 schema 解析', () => {
 })
 
 test('run/exit 0 + 非法 JSON → 失败', () => {
-  const result = spec.classifyRun({ exitCode: 0, stdout: '{"unknown":1}', stderr: '' }, { eventName: 'Stop' })
+  const result = spec.classifyRun({ exitCode: 0, stdout: '{"unknown":1}', stderr: '' }, { eventName: 'agent/turn-stopping' })
   assertEqual(result.status, 'failed', 'status')
   assert(/invalid/.test(result.error), 'error mentions invalid output')
   return 'failed'
 })
 
 test('run/exit 2 + stderr 有内容 → 阻断', () => {
-  const result = spec.classifyRun({ exitCode: 2, stdout: '', stderr: 'do not commit' }, { eventName: 'PreToolUse' })
+  const result = spec.classifyRun({ exitCode: 2, stdout: '', stderr: 'do not commit' }, { eventName: 'tools/pre-execute' })
   assertEqual(result.status, 'blocked', 'status')
   assertEqual(result.reason, 'do not commit', 'reason')
   return 'blocked'
 })
 
 test('run/exit 2 + stderr 为空 → 失败', () => {
-  const result = spec.classifyRun({ exitCode: 2, stdout: '', stderr: '  ' }, { eventName: 'PreToolUse' })
+  const result = spec.classifyRun({ exitCode: 2, stdout: '', stderr: '  ' }, { eventName: 'tools/pre-execute' })
   assertEqual(result.status, 'failed', 'status')
   assert(/blocking reason/.test(result.error), 'error mentions missing reason')
   return 'failed'
 })
 
 test('run/其他退出码 → 失败', () => {
-  const result = spec.classifyRun({ exitCode: 3, stdout: '', stderr: 'boom' }, { eventName: 'Stop' })
+  const result = spec.classifyRun({ exitCode: 3, stdout: '', stderr: 'boom' }, { eventName: 'agent/turn-stopping' })
   assertEqual(result.status, 'failed', 'status')
   assert(/exited with code 3/.test(result.error), 'error message')
   return 'failed'
@@ -727,7 +690,7 @@ const payload = {
   session_id: 'sess-1',
   turn_id: 'turn-1',
   cwd: 'D:/work/huanghao/dsh-hoos',
-  hook_event_name: 'UserPromptSubmit',
+  hook_event_name: 'agent/pre-step',
   model: 'test-model',
   permission_mode: 'default',
   prompt: 'hello from the self-test',
@@ -744,20 +707,20 @@ try {
     assertEqual(echoRun.exitCode, 0, 'exit code')
     const log = JSON.parse(readFileSync(logFile, 'utf8').trim().split('\n')[0])
     assertEqual(log.parsedStdin.prompt, 'hello from the self-test', 'prompt seen by the hook')
-    assertEqual(log.parsedStdin.hook_event_name, 'UserPromptSubmit', 'event name seen by the hook')
+    assertEqual(log.parsedStdin.hook_event_name, 'agent/pre-step', 'event name seen by the hook')
     return 'payload delivered on stdin'
   })
 
   test('echo/stdout 的 JSON 被解析成 additionalContext', () => {
-    const parsed = spec.parseHookOutput(echoRun.stdout, { eventName: 'UserPromptSubmit' })
+    const parsed = spec.parseHookOutput(echoRun.stdout, { eventName: 'agent/pre-step' })
     assert(parsed !== null, `stdout is not valid hook JSON: ${echoRun.stdout}`)
-    assert(parsed.additionalContext.includes('UserPromptSubmit'), 'additionalContext mentions the event')
+    assert(parsed.additionalContext.includes('agent/pre-step'), 'additionalContext mentions the event')
     assert(parsed.additionalContext.includes('hello from the self-test'), 'additionalContext echoes the prompt')
     return 'additionalContext parsed'
   })
 
   test('echo/exit 0 被判为成功', () => {
-    const result = spec.classifyRun(echoRun, { eventName: 'UserPromptSubmit' })
+    const result = spec.classifyRun(echoRun, { eventName: 'agent/pre-step' })
     assertEqual(result.status, 'ok', 'status')
     return 'ok'
   })
@@ -766,7 +729,7 @@ try {
 
   test('echo/exit 2 阻断，stderr 给出原因', () => {
     assertEqual(blockRun.exitCode, 2, 'exit code')
-    const result = spec.classifyRun(blockRun, { eventName: 'UserPromptSubmit' })
+    const result = spec.classifyRun(blockRun, { eventName: 'agent/pre-step' })
     assertEqual(result.status, 'blocked', 'status')
     assert(/blocked/.test(result.reason), 'reason text')
     return result.reason
@@ -776,7 +739,7 @@ try {
 
   test('echo/stdout 的 decision:block 也判为阻断', () => {
     assertEqual(decisionRun.exitCode, 0, 'exit code')
-    const result = spec.classifyRun(decisionRun, { eventName: 'UserPromptSubmit' })
+    const result = spec.classifyRun(decisionRun, { eventName: 'agent/pre-step' })
     assertEqual(result.status, 'blocked', 'status')
     assert(/blocked/.test(result.reason), 'reason text')
     return 'blocked via JSON'
@@ -785,16 +748,16 @@ try {
   const plainRun = await runHook(["--plain"], JSON.stringify(payload), hookEnv)
 
   test('echo/纯文本 stdout 当作 additionalContext', () => {
-    const result = spec.classifyRun(plainRun, { eventName: 'UserPromptSubmit' })
+    const result = spec.classifyRun(plainRun, { eventName: 'agent/pre-step' })
     assertEqual(result.status, 'ok', 'status')
-    assert(/UserPromptSubmit/.test(result.additionalContext), 'additionalContext')
+    assert(result.additionalContext.includes('agent/pre-step'), 'additionalContext')
     return 'ok'
   })
 
   const failRun = await runHook(["--fail"], JSON.stringify(payload), hookEnv)
 
   test('echo/其他退出码判为失败', () => {
-    const result = spec.classifyRun(failRun, { eventName: 'UserPromptSubmit' })
+    const result = spec.classifyRun(failRun, { eventName: 'agent/pre-step' })
     assertEqual(result.status, 'failed', 'status')
     return 'failed'
   })
@@ -803,22 +766,9 @@ try {
 }
 
 // ---------------------------------------------------------------------------
-// G. 插件一致性探针
+// G. 运行记录（lib/runs.js）：计数、环形上限、/hooks 文本
 // ---------------------------------------------------------------------------
-section('G. 插件一致性探针（lib/core.js）')
-for (const item of await runConformance({ root: ROOT, spec, vectors })) {
-  record(item.status, item.name, item.detail)
-}
-
-section('H. 探针自检（证明探针本身能抓错）')
-for (const item of await runConformanceSelfTest({ spec, vectors })) {
-  record(item.status, item.name, item.detail)
-}
-
-// ---------------------------------------------------------------------------
-// I. 运行记录（lib/runs.js）：计数、环形上限、/hooks 文本
-// ---------------------------------------------------------------------------
-section('I. 运行记录与 /hooks 文本（lib/runs.js）')
+section('G. 运行记录与 /hooks 文本（lib/runs.js）')
 {
   const runs = await import(pathToFileURL(join(ROOT, 'lib', 'runs.js')).href)
 
@@ -844,10 +794,10 @@ section('I. 运行记录与 /hooks 文本（lib/runs.js）')
 
   test('runs/环形缓冲：超出上限丢最旧的，最新在前', () => {
     const log = runs.createRunLog({ limit: 3 })
-    log.record('UserPromptSubmit', [{ key: 'a', status: 'ok' }])
-    log.record('Stop', [{ key: 'b', status: 'failed' }])
+    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }])
+    log.record('agent/turn-stopping', [{ key: 'b', status: 'failed' }])
     log.record('SessionStart', [{ key: 'c', status: 'blocked' }])
-    log.record('PreToolUse', [{ key: 'd', status: 'ok' }])
+    log.record('tools/pre-execute', [{ key: 'd', status: 'ok' }])
     const stats = log.stats()
     assertEqual(stats.runs, 3, 'runs')
     assertEqual(stats.history[0].key, 'd', 'newest first')
@@ -870,8 +820,8 @@ section('I. 运行记录与 /hooks 文本（lib/runs.js）')
   test('runs//hooks 文本：总数、信任、待审核清单与运行计数', () => {
     const text = runs.hooksCommandText({
       hooks: [
-        { eventName: 'UserPromptSubmit', key: 'a', trust: 'Trusted', enabled: true, group: 'config', sourceLabel: 'hooks.json', handler: { command: 'echo-hook.mjs' } },
-        { eventName: 'Stop', key: 'b', trust: 'Untrusted', enabled: true, group: 'projects', sourceLabel: 'D:/w/.dsh/hooks.json', handler: { command: 'stop.mjs' } },
+        { eventName: 'agent/pre-step', key: 'a', trust: 'Trusted', enabled: true, group: 'config', sourceLabel: 'hooks.json', handler: { command: 'echo-hook.mjs' } },
+        { eventName: 'agent/turn-stopping', key: 'b', trust: 'Untrusted', enabled: true, group: 'projects', sourceLabel: 'D:/w/.dsh/hooks.json', handler: { command: 'stop.mjs' } },
         { eventName: 'SessionStart', key: 'c', trust: 'Trusted', enabled: false, group: 'config', sourceLabel: 'hooks.json' },
       ],
       stats: {
@@ -879,8 +829,8 @@ section('I. 运行记录与 /hooks 文本（lib/runs.js）')
         blocked: 1,
         failed: 0,
         history: [
-          { eventName: 'UserPromptSubmit', title: 'echo-hook', sourceLabel: 'hooks.json', status: 'blocked', durationMs: 12, reason: 'nope' },
-          { eventName: 'Stop', title: 'stop', source: 'projects', status: 'ok', durationMs: 3 },
+          { eventName: 'agent/pre-step', title: 'echo-hook', sourceLabel: 'hooks.json', status: 'blocked', durationMs: 12, reason: 'nope' },
+          { eventName: 'agent/turn-stopping', title: 'stop', source: 'projects', status: 'ok', durationMs: 3 },
         ],
       },
     })
@@ -888,9 +838,9 @@ section('I. 运行记录与 /hooks 文本（lib/runs.js）')
     assert(/2 trusted/.test(text), 'trusted count')
     assert(/1 needs review/.test(text), 'review count')
     assert(/1 disabled/.test(text), 'disabled count')
-    assert(/Needs review:[\s\S]*Stop/.test(text), 'review list')
+    assert(/Needs review:[\s\S]*agent\/turn-stopping/.test(text), 'review list')
     assert(/2 runs · 1 blocked · 0 failed/.test(text), 'run counters')
-    assert(/✕ UserPromptSubmit/.test(text), 'blocked row mark')
+    assert(/✕ agent\/pre-step/.test(text), 'blocked row mark')
     return 'ok'
   })
 
@@ -902,18 +852,18 @@ section('I. 运行记录与 /hooks 文本（lib/runs.js）')
 
   test('runs/事件行：按事件聚合，计数生效钩子与待审核数', () => {
     const rows = runs.eventRows([
-      { eventName: 'Stop', trust: 'Trusted', enabled: true, runnable: true },
-      { eventName: 'UserPromptSubmit', trust: 'Untrusted', enabled: true, runnable: false },
-      { eventName: 'UserPromptSubmit', trust: 'Modified', enabled: true, runnable: false },
-      { eventName: 'UserPromptSubmit', trust: 'Trusted', enabled: false, runnable: false },
+      { eventName: 'agent/turn-stopping', trust: 'Trusted', enabled: true, runnable: true },
+      { eventName: 'agent/pre-step', trust: 'Untrusted', enabled: true, runnable: false },
+      { eventName: 'agent/pre-step', trust: 'Modified', enabled: true, runnable: false },
+      { eventName: 'agent/pre-step', trust: 'Trusted', enabled: false, runnable: false },
     ])
     assertEqual(rows.length, 2, 'event count')
-    // 事件顺序按 CODEX 事件表：UserPromptSubmit 在 Stop 之前
-    assertEqual(rows[0].eventName, 'UserPromptSubmit', 'first event')
+    // 事件顺序按 EVENT_ORDER：agent/pre-step 在 agent/turn-stopping 之前
+    assertEqual(rows[0].eventName, 'agent/pre-step', 'first event')
     assertEqual(rows[0].installed, 3, 'installed')
     assertEqual(rows[0].active, 0, 'active')
     assertEqual(rows[0].needsReview, 2, 'needsReview')
-    assertEqual(rows[1].eventName, 'Stop', 'second event')
+    assertEqual(rows[1].eventName, 'agent/turn-stopping', 'second event')
     assertEqual(rows[1].active, 1, 'active')
     assertEqual(rows[1].needsReview, 0, 'needsReview')
     return '2 events'
@@ -927,9 +877,9 @@ section('I. 运行记录与 /hooks 文本（lib/runs.js）')
 }
 
 // ---------------------------------------------------------------------------
-// J. 客户端 bundle（client.js）：审核卡片、事件列表、处理器列表、远程调用
+// H. 客户端 bundle（client.js）：审核卡片、事件列表、处理器列表、远程调用
 // ---------------------------------------------------------------------------
-section('J. 客户端 bundle 渲染（test/client-bundle.mjs）')
+section('H. 客户端 bundle 渲染（test/client-bundle.mjs）')
 for (const item of await runClientBundleCheck()) {
   record(item.status, item.name, item.detail)
 }

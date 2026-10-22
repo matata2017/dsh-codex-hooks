@@ -17,7 +17,7 @@ const FAKE_DATA = {
   hooks: [
     {
       key: 'k1',
-      eventName: 'UserPromptSubmit',
+      eventName: 'agent/pre-step',
       title: 'echo-hook',
       trust: 'Untrusted',
       enabled: true,
@@ -28,7 +28,7 @@ const FAKE_DATA = {
     },
     {
       key: 'k2',
-      eventName: 'Stop',
+      eventName: 'agent/turn-stopping',
       title: 'stop-hook',
       trust: 'Trusted',
       enabled: true,
@@ -40,13 +40,13 @@ const FAKE_DATA = {
   ],
   events: [
     {
-      eventName: 'UserPromptSubmit',
+      eventName: 'agent/pre-step',
       installed: 1,
       active: 0,
       needsReview: 1,
       description: 'When the user submits a prompt',
     },
-    { eventName: 'Stop', installed: 1, active: 1, needsReview: 0, description: 'Before a turn ends' },
+    { eventName: 'agent/turn-stopping', installed: 1, active: 1, needsReview: 0, description: 'Before a turn ends' },
   ],
 }
 
@@ -55,7 +55,7 @@ const FAKE_STATS = {
   blocked: 1,
   failed: 0,
   history: [
-    { at: 'now', eventName: 'UserPromptSubmit', title: 'echo-hook', sourceLabel: 'hooks.json', status: 'blocked', durationMs: 12 },
+    { at: 'now', eventName: 'agent/pre-step', title: 'echo-hook', sourceLabel: 'hooks.json', status: 'blocked', durationMs: 12 },
   ],
 }
 
@@ -63,7 +63,7 @@ const FAKE_REVIEW = {
   hooks: [
     {
       key: 'k1',
-      eventName: 'UserPromptSubmit',
+      eventName: 'agent/pre-step',
       title: 'echo-hook',
       trust: 'Untrusted',
       sourceLabel: 'hooks.json',
@@ -330,7 +330,7 @@ export async function runClientBundleCheck() {
     button.props.onClick()
     await settle()
     const rendered = text(renderOverlay()).join(' ')
-    for (const needle of ['events', 'UserPromptSubmit', 'Stop']) {
+    for (const needle of ['events', 'agent/pre-step', 'agent/turn-stopping']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
     if (rendered.includes('recentRuns')) throw new Error('the panels must not show the run log')
@@ -356,7 +356,7 @@ export async function runClientBundleCheck() {
     button.props.onClick()
     await settle()
     const rendered = text(renderOverlay()).join(' ')
-    for (const needle of ['hookStats', 'runs', 'blocked', 'failed', 'runHistory', 'UserPromptSubmit']) {
+    for (const needle of ['hookStats', 'runs', 'blocked', 'failed', 'runHistory', 'agent/pre-step']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
     return 'modal'

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * examples/echo-hook.mjs — a zero-dependency, CODEX-compatible hook script.
+ * examples/echo-hook.mjs — a zero-dependency hook script.
  *
  * It proves the three things the DSH Hooks plugin must get right:
  *
@@ -12,7 +12,7 @@
  *                                          `{ "decision": "block", "reason": "..." }`.
  *   3. exit code 2 blocks              -> `--block` writes the reason to stderr and exits 2.
  *
- * Usage (as a CODEX/DSH hooks.json handler):
+ * Usage (as a hooks.json handler):
  *
  *   node examples/echo-hook.mjs                # JSON on stdout, exit 0
  *   node examples/echo-hook.mjs --block        # reason on stderr, exit 2  (blocking)

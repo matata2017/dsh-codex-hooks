@@ -1,57 +1,54 @@
 # dsh-codex-hooks
 
-给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）用的 Codex 兼容生命周期 hooks。
+给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）用的生命周期钩子，管理方式照 Codex 那套来。
 
-读的是 Codex 那套 `hooks.json` 格式：发现的每个 hook 都出现在 dsh 设置的 **Hooks** 页面里，只有你信任过的才会在对应的 dsh 生命周期事件上执行。
+dsh 自己没有钩子配置：它只暴露拦截 seam。这个插件把一份很小的 `hooks.json` 变成可审查、可批准、可单独关掉、能看到运行情况的钩子。
 
-## 它到底做什么
+English: [README.md](README.md)
 
-- **发现**三处的 `hooks.json`，界面按来源分组：
-  - **From Config** — `$DSH_HOME/hooks.json`（默认 `~/.dsh/hooks.json`）与 `$CODEX_HOME/hooks.json`（默认 `~/.codex/hooks.json`）。
-  - **From Plugins** — 当前 profile 里自带 `hooks.json` 的每个包。
-  - **From Projects** — 本会话接触过的工作区的 `<workspace>/.dsh/hooks.json`（最多记住 32 个）。
-- **指纹**算法与 Codex 一致：把 hook 定义规范化成 JSON，再对它 UTF-8 字节做 `sha256:`。信任就钉在这个指纹上，所以改掉一条 hook 的命令，它的信任会自动失效，不会悄悄跑新代码。
-- **逐个审核**：新出现的 hook 处于*待审核*状态；你批准的是当前指纹，结果写在 `$DSH_HOME/hooks.state.json`，并与每个 hook 独立的启用开关分开保存。
-- **执行** `command` 与 `mcp_tool` 两类 handler，条件是既启用又已信任；按 hook 自己的超时、`cwd`、环境变量与 `command`/`commandWindows` 分平台命令执行。
-- **注入上下文**：`PreToolUse`、`PostToolUse`、`SessionStart`、`UserPromptSubmit`、`SubagentStart` 上，handler 返回的 `additionalContext` 会追加进模型输入（默认上限 2500 字符）。
-- **匹配**支持 matcher 的事件（`PreToolUse`、`PermissionRequest`、`PostToolUse`、`PreCompact`、`PostCompact`、`SessionStart`、`SessionEnd`、`SubagentStart`、`SubagentStop`），通配与正则写法与 Codex 相同。
+## 它到底做了什么
 
-### 事件映射
+- **发现**三个来源的 `hooks.json`，界面上分组显示：
+  - **来自配置** —— `$DSH_HOME/hooks.json`（默认 `~/.dsh/hooks.json`）。
+  - **来自插件** —— 当前 profile 里自带 `hooks.json` 的每个包。
+  - **来自项目配置文件** —— 本会话碰过的 workspace 里的 `<workspace>/.dsh/hooks.json`（最多记 32 个）。
+- **指纹**：把钩子定义规范化成 JSON，再对它 UTF-8 字节做 `sha256:`。信任就钉在这个指纹上，所以改掉一条钩子的命令，它的信任会自动失效，不会悄悄跑新代码。
+- **逐个审查信任**：新钩子处于*待审核*；你在设置页批准当前指纹，状态存在 `$DSH_HOME/hooks.state.json`，同时每条钩子有独立的启用开关。
+- **执行**：只有既启用又可信的 `command`、`mcp_tool` 处理器才会跑，带自己的超时、`cwd`、环境变量，以及 `command`/`commandWindows` 平台拆分。
+- **注入上下文**：处理器返回的 `additionalContext` 会追加到模型输入，适用于 `agent/pre-step`、`tools/pre-execute`、`tools/post-execute`、`agent/created`（默认上限 2500 字符）。
+- **匹配**：工具类 seam（`tools/pre-execute`、`tools/post-execute`、`approval/request`）支持 matcher：`*`、精确名、`A|B` 多选或正则。
 
-Codex 的 14 个事件对应到 dsh 自己的运行时事件：
+### 事件
 
-| Codex 事件 | dsh 事件 | 可拦截 |
+| 事件 | 何时触发 | 可拦截 |
 | --- | --- | --- |
-| `PreModelRequest` | `agent/request` | 否 |
-| `PreToolUse` | `tools/pre-execute` | 是 |
-| `PostToolUse` | `tools/post-execute` | 是 |
-| `PermissionRequest` | `approval/request` | 是 |
-| `UserPromptSubmit` | `agent/pre-step` | 是 |
-| `SessionStart` | `agent/created` | 否 |
-| `SubagentStart` | `agent/created` | 否 |
-| `Stop` | `agent/turn-stopping` | 否 |
-| `SubagentStop` | `agent/turn-stopping` | 否 |
-| `SessionEnd` | `session/disposed` | 否 |
-| `PostModelRequest`、`PreCompact`、`PostCompact`、`Interrupt` | — 能解析、能审核，暂未派发 | — |
+| `agent/pre-step` | 用户提交提示、步骤开始之前 | 可以 |
+| `agent/request` | 模型请求发出之前 | 不可以 |
+| `tools/pre-execute` | 工具调用执行之前 | 可以 |
+| `tools/post-execute` | 工具调用结束之后 | 可以 |
+| `approval/request` | 工具调用向用户申请权限之前 | 可以 |
+| `agent/created` | 会话开始 | 不可以 |
+| `agent/turn-stopping` | 本轮响应结束之前 | 不可以 |
+| `session/disposed` | 会话销毁 | 不可以 |
 
-默认超时 600 秒，`SessionEnd` 例外（默认 1 秒，上限 3 秒），避免退出时卡住。
+默认超时 600 秒；`session/disposed` 例外（默认 1 秒，最多 3 秒），免得退出时卡住。
 
-## 审核、运行记录与 `/hooks`
+## 审查、运行记录与 `/hooks`
 
-- **输入框工具栏的钩子图标** — 输入框工具栏（权限/专家控件旁边）有一个钩子图标，角标数字是待审核的 hook 数量；点它打开**审查钩子**弹窗，布局照 Codex：每条 hook 一行，带复选框、名称、*新建*徽标和 chevron，展开是*来源 / Hook 类型 / 命令 / 超时*；底部提示「你可以稍后在设置中更改此选项」，其中*设置*点开钩子浏览器；三个按钮是*以后再说 / 全部允许 / 允许所选项*。批准即把当前指纹钉进 `$DSH_HOME/hooks.state.json`；其余情况到 **设置 → Hooks** 里逐个处理。
-- **`/hooks` 打开钩子浏览器** — 在输入框敲 `/hooks` 打开两级视图，和 Codex 一致：第一页按事件列出 `生效/已安装` 计数，待审核的事件行尾带 `!`；第二页列出该事件的处理器，带信任状态、启用开关和*信任*/*撤销*按钮。它是标准的 dsh 斜杠命令（宿主组合了 `commands` 服务时注册），不会发给模型。
-- **消息操作行的钩子图标 → Hook stats 弹窗** — 助手消息的操作行有一个钩子图标，点开是 **Hook stats** 弹窗：最近 200 次执行的 `运行 / 拦截 / 失败` 计数，以及 *Run history* 列表（形如 `Completed  UserPromptSubmit  User`）。hook 的输出**不会**打印进对话，模型只会看到 handler 的 `additionalContext`。运行记录和 Codex 一样只放在内存里，不落盘。
-- **浮动面板** — 所有面板都通过 portal 挂到 `document.body` 上并固定定位，因此不会被输入框或消息列裁切。
+- **输入框工具栏的钩子图标** —— 输入框工具栏（权限/专家控件旁边）有一个钩子图标，角标数字是待审核的钩子数量；点它打开**审查钩子**弹窗：每条钩子一行，带复选框、名称、*新建*徽标和 chevron，展开是*来源 / Hook 类型 / 命令 / 超时*；底部提示「你可以稍后在设置中更改此选项」，其中*设置*点开钩子浏览器；三个按钮是*以后再说 / 全部允许 / 允许所选项*。批准即把当前指纹钉进 `$DSH_HOME/hooks.state.json`；其余情况到 **设置 → Hooks** 里逐个处理。
+- **`/hooks` 打开钩子浏览器** —— 第一页按事件列出 `生效/已安装` 计数，待审核的事件行尾带 `!`；第二页列出该事件的处理器，带信任状态、启用开关和*信任*/*撤销*按钮。它是标准的 dsh 斜杠命令（宿主组合了 `commands` 服务时注册），不会发给模型。
+- **消息操作行的钩子图标 → 钩子统计弹窗** —— 助手消息的操作行有一个钩子图标，点开是统计弹窗：最近 200 次执行的 `运行 / 拦截 / 失败` 计数，以及*运行历史*列表（形如 `Completed  agent/pre-step  User`）。钩子输出**不会**打印进对话，模型只会看到处理器的 `additionalContext`。运行记录只放在内存里，不落盘。
+- **浮层**：所有面板都用 portal 渲到 `document.body` 上并固定定位，不会被输入框或消息列裁掉。
 
 ## 安装
 
-需要 dsh `0.1.0-rc.6` 或更新版本，以及 Node 20+。
+需要 dsh `0.1.0-rc.6` 或更新版本，Node 20+。
 
 ```bash
-# 从 GitHub 安装
+# 从 GitHub
 dsh plugin --profile desktop add github:matata2017/dsh-codex-hooks
 
-# 或者从本地目录安装（本项目自己的开发方式）
+# 或者本地开发目录，本项目就是这么用的
 dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 ```
 
@@ -59,41 +56,45 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 
 ## 配置
 
-`~/.dsh/hooks.json`（与 Codex 同结构）：
+`~/.dsh/hooks.json`：
 
 ```json
 {
+  "version": 1,
   "description": "my hooks",
   "hooks": {
-    "SessionStart": [
+    "agent/created": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ./examples/echo-hook.mjs SessionStart",
-            "commandWindows": "node.exe ./examples/echo-hook.mjs SessionStart",
-            "timeout": 15,
-            "statusMessage": "echo-hook: session started"
-          }
-        ]
+        "command": "node ./examples/echo-hook.mjs agent/created",
+        "commandWindows": "node.exe ./examples/echo-hook.mjs agent/created",
+        "timeout": 15,
+        "statusMessage": "echo-hook: session started"
+      }
+    ],
+    "tools/pre-execute": [
+      {
+        "matcher": "Bash",
+        "command": "node ./examples/echo-hook.mjs"
       }
     ]
   }
 }
 ```
 
-handler 类型：`command`、`mcp_tool`（会执行）、`prompt`、`agent`（能解析能审核，暂未派发）。
+一条钩子一个对象：`command`（或 `type: "mcp_tool"` 加 `server` + `tool`），可选 `matcher`、`timeout`、`statusMessage`、`additionalContextLimit`、`async`。
+
+处理器类型：`command`、`mcp_tool`（可执行）；`prompt`、`agent`（可解析、可审查，暂不执行）。
 
 ## 验证状态
 
-- `node test/run-tests.mjs` → **96 passed, 0 failed, 0 skipped**，其中 8 条指纹取自真实 Codex 安装（`test/vectors.json`）。
-- `UserPromptSubmit` 在真实 dsh 会话里跑通：示例 hook 每次提交提示词会打印一行 `echo-hook received event=…`。
-- `selftest/host-e2e.mjs` 对着真实 profile 验证宿主侧。
+- `node test/run-tests.mjs` → **81 passed, 0 failed, 0 skipped**。
+- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **14 passed, 0 failed**。
+- `agent/pre-step` 在真实 dsh 会话里跑通：每提交一次提示，示例钩子打印一行 `echo-hook received event=…`。
 
 ## 安全
 
-hook 会以 dsh 进程的权限执行真实命令，所以信任被钉在每条 hook 的 sha256 指纹上：批准一条 hook 等于批准这一条确切命令，任何改动都要重新批准。只启用你读过的 hook。
+钩子以 dsh 进程的权限执行真实命令。所以信任钉在每条钩子的 sha256 指纹上：批准一条钩子＝批准这一行具体的命令，任何改动都要重新批准。只启用你读过的钩子。
 
-## 许可证
+## License
 
 MIT

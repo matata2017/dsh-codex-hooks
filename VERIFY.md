@@ -1,6 +1,6 @@
 # VERIFY.md — @local/dsh-hooks 安装后验证清单
 
-> 适用范围：DSH 原生插件 `@local/dsh-hooks`（复刻 OpenAI Codex CLI 的 Hooks 管理）安装并重载 profile **之后**。
+> 适用范围：DSH 原生插件 `dsh-codex-hooks`（DSH 自己的生命周期钩子，管理方式照 Codex）安装并重载 profile **之后**。
 > 本文件里的每一条都是**待执行**的检查，不是已经验证过的结论。执行者：Lead。
 > 自动化自检脚本见 [`test/run-tests.mjs`](test/run-tests.mjs)（与安装无关，可随时跑）。
 
@@ -18,7 +18,7 @@
 | 状态文件 | `$DSH_HOME/hooks.state.json` | `{version:1, states:{"<key>":{enabled, trustedHash}}}` |
 | 状态 key 格式 | `<配置绝对路径>:<事件小写下划线>:<group>:<handler>` | 例：`C:\Users\Admin\.dsh\hooks.json:user_prompt_submit:0:0` |
 
-**安装后的第一步**：确认插件已被 profile 加载（`dsh --dump-config` 里能看到 `@local/dsh-hooks`，或 Web UI 设置里出现 Hooks 页）。若设置页没出现，先看 `VERIFY.md` 末尾的排查表，别急着排查 hook 本身。
+**安装后的第一步**：确认插件已被 profile 加载（`dsh --dump-config` 里能看到 `dsh-codex-hooks`，或 Web UI 设置里出现 Hooks 页）。若设置页没出现，先看 `VERIFY.md` 末尾的排查表，别急着排查 hook 本身。
 
 ---
 
@@ -64,16 +64,16 @@ cp D:/work/huanghao/dsh-hoos/examples/hooks.json \
   - `From Config` → 指向 `$DSH_HOME/hooks.json`（用户级）
   - `From Plugins` → 指向 profile 里插件自带的 `hooks.json`
   - `From Projects` → 指向 `<会话 cwd>/.dsh/hooks.json`（项目级）
-- **通过**：三组都出现；每组显示 hook 数量；点开某组，列表里能看到该文件里的事件（UserPromptSubmit / PreToolUse）与命令摘要。
+- **通过**：三组都出现；每组显示 hook 数量；点开某组，列表里能看到该文件里的事件（agent/pre-step / tools/pre-execute）与命令摘要。
 - **失败**：缺任意一组；或分组归属错（例如把用户级文件显示成 From Projects）；或组里数量与文件里的 handler 条数对不上。
-- **判定数量**：`examples/hooks.json` 每个事件各 1 个 handler，所以每组应显示 **2 hooks**（UserPromptSubmit 1 + PreToolUse 1）。若 UI 按事件计数，以 UI 文案为准但需与文件一致。
+- **判定数量**：`examples/hooks.json` 每个事件各 1 个 handler，所以每组应显示 **2 hooks**（agent/pre-step 1 + tools/pre-execute 1）。若 UI 按事件计数，以 UI 文案为准但需与文件一致。
 - **证据**：三张分组卡片的截图 + 展开后的列表。
 
 ### C3 — 每条 hook 显示事件名与描述
 
 - **怎么做**：展开任一分组，看每行。
-- **预期**：每行显示事件名（`UserPromptSubmit`、`PreToolUse`）、CODEX 风格的事件描述（"When the user submits a prompt" / "Before a tool runs" 之类）、以及 hook 标识（`statusMessage` 或命令 basename）。
-- **通过**：事件名 + 描述 + 标识三者齐全，且事件描述与 CODEX 内置表一致。
+- **预期**：每行显示事件名（`agent/pre-step`、`tools/pre-execute`）、事件描述（"When the user submits a prompt, before the step runs" / "Before a tool runs" 之类）、以及 hook 标识（`statusMessage` 或命令 basename）。
+- **通过**：事件名 + 描述 + 标识三者齐全，且事件描述与 `lib/events.js` 里的 EVENT_DESCRIPTIONS 一致。
 - **失败**：只有命令没有事件名；或事件描述缺失/串台。
 - **证据**：展开列表截图。
 
@@ -108,9 +108,9 @@ Windows: %TEMP%\dsh-hooks-echo.log     (node -p "require('os').tmpdir()")
   1. 记下日志文件当前行数：`node -p "require('fs').readFileSync(require('path').join(require('os').tmpdir(),'dsh-hooks-echo.log'),'utf8').trim().split('\n').length"`（文件不存在就算 0 行）
   2. 在 Web UI 里发一条普通消息（例如「hook 验证 1234」）。
   3. 再看一眼行数。
-  4. 调一次工具（例如让它读一个文件）以触发 PreToolUse。
-- **预期**：发消息后 UserPromptSubmit 触发 1 次；调工具后 PreToolUse 触发 1 次。日志里每行是一个 JSON，含 `rawStdin` / `parsedStdin` / `time` / `pid`。
-- **通过**：行数增加了，且新增行的 `parsedStdin.hook_event_name` 分别是 `UserPromptSubmit` 与 `PreToolUse`；`parsedStdin` 里能读到本次 prompt。
+  4. 调一次工具（例如让它读一个文件）以触发 tools/pre-execute。
+- **预期**：发消息后 agent/pre-step 触发 1 次；调工具后 tools/pre-execute 触发 1 次。日志里每行是一个 JSON，含 `rawStdin` / `parsedStdin` / `time` / `pid`。
+- **通过**：行数增加了，且新增行的 `parsedStdin.hook_event_name` 分别是 `agent/pre-step` 与 `tools/pre-execute`；`parsedStdin` 里能读到本次 prompt。
 - **失败**：行数不变（hook 没跑）；或事件名不对（映射错）；或 `parsedStdin` 为 null（stdin 没收到合法 JSON）。
 - **证据**：`dsh-hooks-echo.log` 的新增行原文（这就是"hook 真的被触发"的硬证据，不依赖 UI 文案）。
 
@@ -119,17 +119,17 @@ Windows: %TEMP%\dsh-hooks-echo.log     (node -p "require('os').tmpdir()")
 把某条 hook 的命令改成 `... echo-hook.mjs --block`（stderr 出一行原因，exit 2），或在示例里加一条 `--decision-block` 的 hook。
 
 - **预期**：`exit 2` + stderr 非空 → 阻断；`exit 2` + stderr 空 → 失败（不是阻断）；其它退出码 → 失败。
-- **通过**：UserPromptSubmit 被阻断时，**这一轮没有真正发出去**，且 UI/会话里出现 hook 给出的原因文本。
+- **通过**：agent/pre-step 被阻断时，**这一轮没有真正发出去**，且 UI/会话里出现 hook 给出的原因文本。
 - **失败**：hook 说 block 但消息照发；或 block 之后没有任何原因文本。
 - **证据**：界面截图 + 会话里出现的原因文案 + 日志里该次 `pid` 的记录。
-- **注意**：只有控制类事件能阻断（UserPromptSubmit / PreToolUse / Stop）。PostToolUse 之类的后置事件阻断没有意义，若 UI 允许在那里阻断属于实现偏差。
+- **注意**：只有控制类事件能阻断（agent/pre-step / tools/pre-execute / Stop）。PostToolUse 之类的后置事件阻断没有意义，若 UI 允许在那里阻断属于实现偏差。
 
 ### C8 — additionalContext 注入
 
 echo hook 默认输出 `hookSpecificOutput.additionalContext`，内容里含 `echo-hook received event=... | prompt=...`。
 
 - **预期**：这段 additionalContext 出现在**送给模型的上下文**里。
-- **通过**：模型回答里能引用出 `echo-hook received event=UserPromptSubmit` 这类片段，或该文本出现在会话的上下文/消息记录里。
+- **通过**：模型回答里能引用出 `echo-hook received event=agent/pre-step` 这类片段，或该文本出现在会话的上下文/消息记录里。
 - **失败**：hook 跑成功了（日志有记录）但 additionalContext 没进上下文 —— 说明解析或注入链路断了。
 - **证据**：模型回复截图（里面含该字符串）+ 日志行。
 
@@ -196,4 +196,4 @@ node test/run-tests.mjs            # 全部；退出码 0 = 全过，1 = 有失�
 node test/run-tests.mjs --quiet    # 只看失败与汇总
 ```
 
-覆盖：真实 CODEX 哈希向量 8 条逐条比对、hooks.json 解析与归一化、matcher 四种形态、状态文件读写、四种信任状态、hook 输出 JSON 与退出码语义、echo hook 端到端、以及与 `lib/core.js` 的一致性探针（插件未落地时该项为 SKIP）。
+覆盖：指纹稳定性与变更检测、hooks.json 解析与归一化（DSH 原生格式）、matcher 四种形态、状态文件读写、四种信任状态、hook 输出 JSON 与退出码语义、echo hook 端到端、运行记录与 /hooks 文本、客户端 bundle 渲染。
