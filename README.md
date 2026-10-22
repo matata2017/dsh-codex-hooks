@@ -1,10 +1,26 @@
 # dsh-codex-hooks
 
-Lifecycle hooks for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh), managed the way Codex manages its hooks.
+**Codex's hook management, ported to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh).**
 
-dsh has no hook config of its own: it exposes interception seams, and this plugin turns a small `hooks.json` into hooks you can review, approve, switch off and watch.
+Codex gives every hook a review step, a fingerprint you approve once, a settings page, a `/hooks` browser and a stats panel. dsh ships none of that: it exposes interception seams and nothing around them. This plugin ports that management layer over, so hooks on dsh are reviewed, trusted, switched off and inspected the same way they are in Codex.
+
+The config file is dsh's own (`hooks.json` with dsh event names) — what is ported is the behaviour around it, not Codex's file format.
 
 中文文档：[README.zh.md](README.zh.md)
+
+## Screenshots
+
+Review happens where the work happens — a hook button in the composer, a red dot while something is unapproved:
+
+![Hook button in the composer, red dot while hooks need review](docs/screenshots/composer-hook-button.png)
+
+Clicking it opens the review dialog: one row per hook, a *New* badge, a chevron for the details, and *Not now / Allow all / Allow selected*:
+
+![Review hooks dialog](docs/screenshots/review-dialog.png)
+
+Everything else is managed in **Settings → Hooks**: hooks grouped by where they came from, each with its trust state, an on/off switch, *Trust* / *Revoke* and a dry-run *Test*:
+
+![Settings page listing hooks with trust state and controls](docs/screenshots/settings-hooks.png)
 
 ## What it actually does
 
@@ -38,6 +54,7 @@ Default timeout is 600s, except `session/disposed` (1s default, 3s maximum) so s
 - **Hook button in the composer** — a hook icon sits in the composer's tool row (next to the permission and agent controls), with a small red dot while hooks still need review (no number — a count goes stale as soon as a hook is trusted elsewhere); clicking it opens the **Review hooks** dialog: one row per hook with a checkbox, the hook name, a *New* badge and a chevron that expands *Source / Hook type / Command / Timeout*, then the hint "You can change this later in Settings, under Hooks" (plain text: dsh exposes no API for a plugin to open a settings section, so it does not pretend to jump) and the three choices *Not now / Allow all / Allow selected*. Approving pins the current fingerprints in `$DSH_HOME/hooks.state.json`; everything else is handled later in **Settings → Hooks**, one hook at a time.
 - **`/hooks` opens the hooks browser** — the first page lists the events with `active/installed` and a `!` marker on the events that need review, the second page lists the handlers of one event with their trust state, an on/off switch and a *Trust* / *Revoke* button. It is a normal dsh slash command (registered when the host composes the `commands` service), so it never reaches the model.
 - **Hook stats in the message action row** — the assistant message action row carries a hook icon; clicking it opens a **Hook stats** dialog with `Runs / Blocked / Failed` for the last 200 executions and a *Run history* list (`Completed  agent/pre-step  User`). Hook output is *not* printed into the conversation; the model only ever sees a handler's `additionalContext`. The run log lives in memory for the session and is not written to disk.
+- **Dry run** — *Test* in the settings page runs one hook once with sample input and reports ok / blocked / failed plus the duration. It refuses to run a hook that has not been approved.
 - **Floating panels** — every panel is rendered through a portal on `document.body` with a fixed position, so it is never clipped by the composer or the message column.
 
 ### Auto-approving a tool call
@@ -110,7 +127,7 @@ Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `age
 
 ## What a hook cannot do here
 
-These are dsh boundaries, not missing code: they need a seam the harness does not expose.
+These are dsh boundaries, not missing code: they need a seam the harness does not expose. Codex has these; dsh does not, so the port stops here.
 
 - **Context is user-role only.** `agent/pre-step` takes `UserMessage[]`, and no public API appends a developer message, so `additionalContext` cannot arrive with the extra weight a developer message would carry.
 - **Tool arguments cannot be rewritten.** `tools/pre-execute` returns allow / deny / ask / cancel; dsh deliberately excludes input rewriting because arguments are already logged and presented.

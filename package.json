@@ -45,7 +45,8 @@
     "locale/en.json",
     "locale/zh.json",
     "icon.svg",
-    "README.zh.md"
+    "README.zh.md",
+    "docs/screenshots"
   ],
   "dsh": {
     "bundle": {

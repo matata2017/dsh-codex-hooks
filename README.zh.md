@@ -1,10 +1,26 @@
 # dsh-codex-hooks
 
-给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）用的生命周期钩子，管理方式照 Codex 那套来。
+**把 CODEX 的钩子管理方式移植到 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）。**
 
-dsh 自己没有钩子配置：它只暴露拦截 seam。这个插件把一份很小的 `hooks.json` 变成可审查、可批准、可单独关掉、能看到运行情况的钩子。
+CODEX 里每条钩子都有：一次审查、钉在指纹上的一次批准、设置页、`/hooks` 浏览器，还有运行统计。dsh 一样都没有——它只暴露拦截 seam，其余全空。这个插件把这一整套管理搬过来，于是 dsh 上的钩子也能按 CODEX 那套审查、批准、单独关掉、看运行情况。
+
+配置文件是 dsh 自己的（`hooks.json` + dsh 事件名）——移植的是围绕钩子的那套行为，不是 CODEX 的文件格式。
 
 English: [README.md](README.md)
+
+## 截图
+
+审查就发生在干活的地方：输入框工具栏一个钩子图标，有待审核时右上角一个红点：
+
+![输入框工具栏的钩子图标，待审核时红点](docs/screenshots/composer-hook-button.png)
+
+点开就是审查弹窗：一条钩子一行，带*新建*徽标，chevron 展开细节，底部*以后再说 / 全部允许 / 允许所选项*：
+
+![审查钩子弹窗](docs/screenshots/review-dialog.png)
+
+其余都在 **设置 → Hooks** 里管：按来源分组，每条带信任状态、启用开关、*信任*/*撤销*和一次性的*测试*：
+
+![设置页里的钩子列表、信任状态与操作](docs/screenshots/settings-hooks.png)
 
 ## 它到底做了什么
 
@@ -38,6 +54,7 @@ English: [README.md](README.md)
 - **输入框工具栏的钩子图标** —— 输入框工具栏（权限/专家控件旁边）有一个钩子图标，待审核时右上角只有一个红点、不带数字（数字一被别处信任就会过期）；点它打开**审查钩子**弹窗：每条钩子一行，带复选框、名称、*新建*徽标和 chevron，展开是*来源 / Hook 类型 / 命令 / 超时*；底部提示「你可以稍后在 设置 → 钩子 里更改此选项」（纯文字，dsh 没有给插件打开设置页的接口，所以不假装能跳）；三个按钮是*以后再说 / 全部允许 / 允许所选项*。点工具图标就打开，不自动弹。批准即把当前指纹钉进 `$DSH_HOME/hooks.state.json`；其余情况到 **设置 → Hooks** 里逐个处理。
 - **`/hooks` 打开钩子浏览器** —— 第一页按事件列出 `生效/已安装` 计数，待审核的事件行尾带 `!`；第二页列出该事件的处理器，带信任状态、启用开关和*信任*/*撤销*按钮。它是标准的 dsh 斜杠命令（宿主组合了 `commands` 服务时注册），不会发给模型。
 - **消息操作行的钩子图标 → 钩子统计弹窗** —— 助手消息的操作行有一个钩子图标，点开是统计弹窗：最近 200 次执行的 `运行 / 拦截 / 失败` 计数，以及*运行历史*列表（形如 `Completed  agent/pre-step  User`）。钩子输出**不会**打印进对话，模型只会看到处理器的 `additionalContext`。运行记录只放在内存里，不落盘。
+- **试跑** —— 设置页的*测试*会用样例输入把一条钩子跑一次，报告 通过/拦截/失败 和耗时；未批准的钩子拒绝试跑。
 - **浮层**：所有面板都用 portal 渲到 `document.body` 上并固定定位，不会被输入框或消息列裁掉。
 
 ### 自动放行一次工具调用
@@ -110,7 +127,7 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 
 ## 这里做不到的事
 
-下面几条是 dsh 的边界，不是我们没写：需要一个宿主没开放的接缝。
+下面几条是 dsh 的边界，不是我们没写：需要一个宿主没开放的接缝。CODEX 有这些，dsh 没有，所以移植到这里为止。
 
 - **上下文只能以 user 角色注入**：`agent/pre-step` 收的是 `UserMessage[]`，也没有对外的「追加 developer 消息」接口，所以 `additionalContext` 拿不到 developer 消息那种分量。
 - **改不了工具入参**：`tools/pre-execute` 只能 allow / deny / ask / cancel，dsh 明确排除入参改写（参数已经记日志并展示给用户）。
