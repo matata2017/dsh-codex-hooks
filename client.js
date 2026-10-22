@@ -1,11 +1,15 @@
-// ponytail: the host's boot manifest keeps the package id it composed when the
-// host process started. After a rename the manifest still advertises the old id,
-// and a bundle that declares a different one never activates. Adopt the id the
-// manifest advertises for us; drop this once every host restarts on >=0.1.0.
+// ponytail: the host composes one boot row per installed package and the
+// browser loader checks that the bundle registered exactly that id. The row id
+// is the package name, so register under ours; the manifest is the fallback
+// for a host that composed the row under another name.
 const SELF_ID = (() => {
   const entries = (typeof window !== 'undefined' && window.__DSH_BOOT__?.entries) || []
-  const row = entries.find((entry) => typeof entry?.id === 'string' && /dsh-(?:codex-)?hooks$/.test(entry.id))
-  return row?.id ?? 'dsh-codex-hooks'
+  const ids = entries.map((entry) => entry?.id).filter((id) => typeof id === 'string')
+  return (
+    ids.find((id) => id === 'dsh-codex-hooks') ??
+    ids.find((id) => /dsh-(?:codex-)?hooks$/.test(id)) ??
+    'dsh-codex-hooks'
+  )
 })()
 
 window.__ModuleLoader__.load({
@@ -74,6 +78,8 @@ window.__ModuleLoader__.load({
       close: 'Close',
       triggerLabel: 'Lifecycle hooks',
       pendingTitle: '{count} hook(s) need review',
+      hookStats: 'Hook stats',
+      runHistory: 'Run history',
     }
 
     const zh = {
@@ -135,6 +141,8 @@ window.__ModuleLoader__.load({
       close: '关闭',
       triggerLabel: '生命周期钩子',
       pendingTitle: '有 {count} 个钩子需要审核',
+      hookStats: '钩子统计',
+      runHistory: '运行历史',
     }
 
     const STYLE = [
@@ -192,6 +200,22 @@ window.__ModuleLoader__.load({
       '.__dh_popup{position:absolute;bottom:calc(100% + 4px);left:0;right:0;z-index:100;box-sizing:border-box;max-height:min(60vh,520px);overflow:auto;border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:12px;background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1,#fff));box-shadow:var(--dsw-elevation-prominent);padding:10px 12px;display:flex;flex-direction:column;gap:10px;pointer-events:auto;text-align:left}',
       '.__dh_pendingRow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb);font-size:12px}',
       '.__dh_pendingRow:last-child{border-bottom:none}',
+      '.__dh_actionBtn{width:28px;height:28px;border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary,#6b7280);cursor:pointer;background:0 0;border:none;justify-content:center;align-items:center;padding:6px;display:inline-flex}',
+      '.__dh_actionBtn:hover{background:var(--dsw-alias-interactive-bg-hover,#f2f4f7);color:var(--dsw-alias-label-secondary,#4b5563)}',
+      '.__dh_actionBtn svg{width:17px;height:17px}',
+      '.__dh_modalRoot{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center}',
+      '.__dh_modalBackdrop{position:absolute;inset:0;background:rgba(0,0,0,.28)}',
+      '.__dh_modal{position:relative;z-index:1;box-sizing:border-box;min-width:320px;max-width:min(520px,92vw);border-radius:14px;border:1px solid var(--dsw-alias-border-l2,#dce2eb);background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1,#fff));box-shadow:var(--dsw-elevation-prominent);padding:16px 18px;display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-primary,#1f2328)}',
+      '.__dh_modalHead{display:flex;align-items:center;gap:10px;margin-bottom:6px}',
+      '.__dh_modalTitle{font-size:15px;font-weight:600;flex:1}',
+      '.__dh_iconBtn{border:none;background:transparent;color:var(--dsw-alias-label-tertiary,#6b7280);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}',
+      '.__dh_iconBtn:hover{background:var(--dsw-alias-interactive-bg-hover,#f2f4f7)}',
+      '.__dh_statRow{display:flex;align-items:center;justify-content:space-between;padding:2px 0;color:var(--dsw-alias-label-secondary,#4b5563)}',
+      '.__dh_modalSection{margin-top:12px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_history{display:flex;flex-direction:column;margin-top:4px}',
+      '.__dh_historyRow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563)}',
+      '.__dh_historyChevron{color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_historyStatus{color:var(--dsw-alias-label-primary,#1f2328)}',
     ].join('')
 
     /* ---------------- connection plumbing ---------------- */
@@ -551,7 +575,6 @@ window.__ModuleLoader__.load({
       const conn = useConnection()
       const view = usePanel()
       const [data, setData] = React.useState(null)
-      const [stats, setStats] = React.useState(null)
       const [pending, setPending] = React.useState([])
       const [busy, setBusy] = React.useState(null)
       const [error, setError] = React.useState(null)
@@ -564,11 +587,6 @@ window.__ModuleLoader__.load({
           setError(null)
         } catch (failure) {
           setError(failure?.message ?? String(failure))
-        }
-        try {
-          setStats(await call('stats', {}))
-        } catch {
-          setStats(null)
         }
         try {
           const value = await call('review', {})
@@ -785,47 +803,6 @@ window.__ModuleLoader__.load({
                       ),
                     ),
               ),
-          stats
-            ? h(
-                'div',
-                { className: '__dh_stats' },
-                h(
-                  'div',
-                  { className: '__dh_rowHead' },
-                  h('span', { className: '__dh_event' }, t('recentRuns')),
-                  h(
-                    'span',
-                    { className: '__dh_count' },
-                    `${t('runs')} ${stats.runs} \u00b7 ${t('blocked')} ${stats.blocked} \u00b7 ${t('failed')} ${stats.failed}`,
-                  ),
-                ),
-                (stats.history ?? []).length === 0
-                  ? h('div', { className: '__dh_empty' }, t('noRuns'))
-                  : (stats.history ?? []).slice(0, 10).map((row, index) =>
-                      h(
-                        'div',
-                        { key: `${row.at}-${index}`, className: '__dh_runRow' },
-                        h(
-                          'span',
-                          {
-                            className:
-                              row.status === 'ok' ? '__dh_runMark' : '__dh_runMark __dh_runMarkBad',
-                          },
-                          STATUS_MARK[row.status] ?? '?',
-                        ),
-                        h('span', { className: '__dh_event' }, row.eventName),
-                        h('span', { className: '__dh_name' }, row.title),
-                        h('span', { className: '__dh_count' }, row.sourceLabel || row.source || ''),
-                        h(
-                          'span',
-                          { className: '__dh_actions __dh_count' },
-                          t(STATUS_KEY[row.status] ?? 'statusFailed'),
-                          row.durationMs ? ` ${row.durationMs}ms` : '',
-                        ),
-                      ),
-                    ),
-              )
-            : null,
         ),
       )
     }
@@ -885,6 +862,167 @@ window.__ModuleLoader__.load({
       )
     }
 
+
+    /* ---------------- hook stats modal (Codex style) ---------------- */
+
+    // Codex shows "Hook stats" from a message action: a modal with the run
+    // counters and the run history. The same panel is reachable from the
+    // assistant message action row.
+    const statsState = { open: false }
+    const statsListeners = new Set()
+
+    function setStatsOpen(open) {
+      if (statsState.open === open) return
+      statsState.open = open
+      for (const listener of statsListeners) listener()
+    }
+
+    function openStats() {
+      setStatsOpen(true)
+    }
+
+    function closeStats() {
+      setStatsOpen(false)
+    }
+
+    function useStatsState() {
+      const [, bump] = React.useState(0)
+      React.useEffect(() => {
+        const listener = () => bump((value) => value + 1)
+        statsListeners.add(listener)
+        return () => {
+          statsListeners.delete(listener)
+        }
+      }, [])
+      return statsState
+    }
+
+    function hookIcon() {
+      return h(
+        'svg',
+        {
+          viewBox: '0 0 16 16',
+          width: 15,
+          height: 15,
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.4,
+          strokeLinecap: 'round',
+          'aria-hidden': 'true',
+        },
+        h('path', { d: 'M6.5 2.5v6a3.5 3.5 0 0 0 7 0V9' }),
+        h('path', { d: 'M11 5.5l2.5 2.5' }),
+      )
+    }
+
+    function HooksStatsAction() {
+      const t = (key, values) => format(translate(key), values)
+      const view = useStatsState()
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: '__dh_actionBtn',
+          'aria-label': t('hookStats'),
+          title: t('hookStats'),
+          onClick: () => (view.open ? closeStats() : openStats()),
+        },
+        hookIcon(),
+      )
+    }
+
+    function HooksStatsModal() {
+      const t = (key, values) => format(translate(key), values)
+      const conn = useConnection()
+      const view = useStatsState()
+      const [stats, setStats] = React.useState(null)
+      const [error, setError] = React.useState(null)
+
+      const refresh = React.useCallback(async () => {
+        if (!conn) return
+        try {
+          setStats(await call('stats', {}))
+          setError(null)
+        } catch (failure) {
+          setError(failure?.message ?? String(failure))
+        }
+      }, [conn])
+
+      React.useEffect(() => {
+        if (view.open) refresh()
+      }, [view.open, refresh])
+
+      React.useEffect(() => {
+        if (!view.open) return undefined
+        const onKey = (event) => {
+          if (event.key !== 'Escape') return
+          event.stopPropagation()
+          closeStats()
+        }
+        document.addEventListener('keydown', onKey, true)
+        return () => document.removeEventListener('keydown', onKey, true)
+      }, [view.open])
+
+      if (!view.open) return null
+
+      const history = stats?.history ?? []
+      return h(
+        'div',
+        { className: '__dh_modalRoot' },
+        h('div', { className: '__dh_modalBackdrop', onClick: closeStats }),
+        h(
+          'div',
+          {
+            className: '__dh_modal',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-label': t('hookStats'),
+          },
+          h(
+            'div',
+            { className: '__dh_modalHead' },
+            h('span', { className: '__dh_modalTitle' }, t('hookStats')),
+            h(
+              'button',
+              { className: '__dh_iconBtn', 'aria-label': t('close'), onClick: closeStats },
+              '×',
+            ),
+          ),
+          h('div', { className: '__dh_statRow' }, h('span', null, t('runs')), h('span', null, String(stats?.runs ?? 0))),
+          h(
+            'div',
+            { className: '__dh_statRow' },
+            h('span', null, t('blocked')),
+            h('span', null, String(stats?.blocked ?? 0)),
+          ),
+          h(
+            'div',
+            { className: '__dh_statRow' },
+            h('span', null, t('failed')),
+            h('span', null, String(stats?.failed ?? 0)),
+          ),
+          error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
+          h('div', { className: '__dh_modalSection' }, t('runHistory')),
+          history.length === 0
+            ? h('div', { className: '__dh_empty' }, t('noRuns'))
+            : h(
+                'div',
+                { className: '__dh_history' },
+                history.map((row, index) =>
+                  h(
+                    'div',
+                    { key: `${row.at}-${index}`, className: '__dh_historyRow' },
+                    h('span', { className: '__dh_historyChevron' }, '>'),
+                    h('span', { className: '__dh_historyStatus' }, t(STATUS_KEY[row.status] ?? 'statusOk')),
+                    h('span', { className: '__dh_event' }, row.eventName),
+                    h('span', { className: '__dh_name' }, row.sourceLabel || row.source || ''),
+                  ),
+                ),
+              ),
+        ),
+      )
+    }
+
     /* ---------------- plugin entry point ---------------- */
 
     function apply(ctx) {
@@ -941,6 +1079,38 @@ window.__ModuleLoader__.load({
           )
         } catch {
           /* the composer overlay slot is optional: the settings page is the only entry */
+        }
+        try {
+          client.slots.inject('conversation.chat.assistant-actions', () =>
+            client.slots.register(
+              {
+                name: 'conversation.chat.assistant-actions',
+                id: 'dsh-codex-hooks/stats',
+                order: 10,
+                locale: NS,
+                inject: () => ({ t: translate }),
+              },
+              HooksStatsAction,
+            ),
+          )
+        } catch {
+          /* the message action row is optional */
+        }
+        try {
+          client.slots.inject('shell.overlay', () =>
+            client.slots.register(
+              {
+                name: 'shell.overlay',
+                id: 'dsh-codex-hooks/stats-modal',
+                order: 40,
+                locale: NS,
+                inject: () => ({ t: translate }),
+              },
+              HooksStatsModal,
+            ),
+          )
+        } catch {
+          /* the shell overlay is optional */
         }
         setConnection(resolveHandle(client.connection))
       })

@@ -167,22 +167,34 @@ export async function runClientBundleCheck() {
 
   const trigger = registrations.find((entry) => entry.spec.name === 'conversation.input.left')
   const popup = registrations.find((entry) => entry.spec.name === 'conversation.input.overlay')
+  const action = registrations.find((entry) => entry.spec.name === 'conversation.chat.assistant-actions')
+  const modal = registrations.find((entry) => entry.spec.name === 'shell.overlay')
   const renderTrigger = () => {
     queue = [connection, null, 0]
     return trigger.component({})
   }
   const renderPopup = () => {
-    queue = [connection, null, FAKE_DATA, FAKE_STATS, FAKE_REVIEW.hooks, null, null]
+    queue = [connection, null, FAKE_DATA, FAKE_REVIEW.hooks, null, null]
     return popup.component({})
   }
+  const renderAction = () => {
+    queue = [connection, null]
+    return action.component({})
+  }
+  const renderModal = () => {
+    queue = [connection, null, FAKE_STATS, null]
+    return modal.component({})
+  }
 
-  check('client/注册设置段、工具栏按钮与 composer 浮层', () => {
+  check('client/注册设置段、工具栏按钮、浮层与消息操作', () => {
     if (!popup) throw new Error('overlay slot not registered')
     if (!trigger) throw new Error('composer tool row slot not registered')
+    if (!action) throw new Error('assistant action slot not registered')
+    if (!modal) throw new Error('shell overlay slot not registered')
     if (!registrations.find((entry) => entry.spec.name === 'settings.section')) {
       throw new Error('settings section not registered')
     }
-    return '3 slots'
+    return '5 slots'
   })
 
   check('client/为 /hooks 注册客户端动作', () => {
@@ -213,11 +225,12 @@ export async function runClientBundleCheck() {
     return 'card'
   })
 
-  check('client//hooks 打开事件列表与运行计数', () => {
+  check('client//hooks 打开事件列表', () => {
     const opened = text(renderPopup()).join(' ')
-    for (const needle of ['events', 'UserPromptSubmit', 'Stop', 'runs 2', 'blocked 1']) {
+    for (const needle of ['events', 'UserPromptSubmit', 'Stop']) {
       if (!opened.includes(needle)) throw new Error(`missing "${needle}" in: ${opened}`)
     }
+    if (opened.includes('recentRuns')) throw new Error('the popup must not show the run log')
     return 'events'
   })
 
@@ -227,8 +240,21 @@ export async function runClientBundleCheck() {
     row.props.onClick()
     const handlers = text(renderPopup()).join(' ')
     if (!handlers.includes('handlers')) throw new Error(`handlers page missing: ${handlers}`)
-    if (!handlers.includes('echo-hook')) throw new Error(`handler row missing: ${handlers}`)
+    if (!handlers.includes('k1')) throw new Error(`handler row missing: ${handlers}`)
+    if (!handlers.includes('hooks.json')) throw new Error(`handler source missing: ${handlers}`)
     return 'handlers'
+  })
+
+  check('client/消息操作行渲染钩子按钮，点击打开统计弹窗', () => {
+    const button = findRow(renderAction(), '__dh_actionBtn')
+    if (!button) throw new Error('message action button not rendered')
+    if (button.props['aria-label'] !== 'hookStats') throw new Error('action button has no label')
+    button.props.onClick()
+    const modalText = text(renderModal()).join(' ')
+    for (const needle of ['hookStats', 'runs', 'runHistory', 'UserPromptSubmit']) {
+      if (!modalText.includes(needle)) throw new Error(`missing "${needle}" in: ${modalText}`)
+    }
+    return 'modal'
   })
 
   await new Promise((resolve) => setTimeout(resolve, 50))
