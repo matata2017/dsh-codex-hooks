@@ -61,6 +61,17 @@ window.__ModuleLoader__.load({
       statusBlocked: 'Blocked',
       statusFailed: 'Failed',
       statusSkipped: 'Skipped',
+      reviewTitle: 'Hooks need review',
+      reviewCount: '{count} hook(s) are new or changed.',
+      reviewNote: 'Trusted hooks can run commands on your machine.',
+      reviewHooks: 'Review hooks',
+      trustAllContinue: 'Trust all and continue',
+      continueWithout: "Continue without trusting (hooks won't run)",
+      browserSubtitle: 'View and manage lifecycle hooks.',
+      events: 'Events',
+      handlers: 'Handlers',
+      back: 'Back',
+      close: 'Close',
     }
 
     const zh = {
@@ -109,6 +120,17 @@ window.__ModuleLoader__.load({
       statusBlocked: '被拦截',
       statusFailed: '失败',
       statusSkipped: '已跳过',
+      reviewTitle: '钩子需要审核',
+      reviewCount: '{count} 个钩子是新的或已被修改。',
+      reviewNote: '信任后钩子可以在你的机器上执行命令。',
+      reviewHooks: '查看钩子',
+      trustAllContinue: '全部信任并继续',
+      continueWithout: '暂不信任（钩子不会运行）',
+      browserSubtitle: '查看并管理生命周期钩子。',
+      events: '事件',
+      handlers: '处理器',
+      back: '返回',
+      close: '关闭',
     }
 
     const STYLE = [
@@ -144,9 +166,21 @@ window.__ModuleLoader__.load({
       '.__dh_runRow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:var(--dsw-alias-label-secondary,#4b5563)}',
       '.__dh_runMark{width:14px;text-align:center;color:var(--dsw-alias-label-tertiary,#6b7280)}',
       '.__dh_runMarkBad{color:var(--dsw-alias-state-error-primary,#f85149)}',
-      '.__dh_banner{display:flex;align-items:center;gap:8px;margin:0 0 6px;padding:6px 10px;border:1px solid var(--dsw-alias-state-business-primary,#3964fe);border-radius:10px;background:var(--dsw-alias-bg-layer-3,#f7f8fa);font-size:12px}',
+      '.__dh_banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px;padding:6px 10px;border:1px solid var(--dsw-alias-state-business-primary,#3964fe);border-radius:10px;background:var(--dsw-alias-bg-layer-3,#f7f8fa);font-size:12px;line-height:18px;pointer-events:auto}',
       '.__dh_bannerText{flex:1;min-width:0;color:var(--dsw-alias-label-primary,#1f2328)}',
       '.__dh_bannerHint{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_card{border:1px solid var(--dsw-alias-state-business-primary,#3964fe);border-radius:10px;background:var(--dsw-alias-bg-layer-3,#f7f8fa);padding:8px 10px;display:flex;flex-direction:column;gap:4px;margin:0 0 6px}',
+      '.__dh_cardTitle{font-weight:600;font-size:12px}',
+      '.__dh_cardCount{font-size:12px;color:var(--dsw-alias-state-warning-primary,#b8820b)}',
+      '.__dh_cardHint{font-size:11px;color:var(--dsw-alias-label-tertiary,#6b7280)}',
+      '.__dh_panel{border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:10px;background:var(--dsw-alias-bg-layer-1,#fff);padding:8px 10px;display:flex;flex-direction:column;gap:8px;max-height:min(60vh,520px);overflow:auto}',
+      '.__dh_panelHead{display:flex;align-items:center;gap:8px}',
+      '.__dh_list{display:flex;flex-direction:column}',
+      '.__dh_listRow{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--dsw-alias-border-l2,#dce2eb);font-size:12px}',
+      '.__dh_listRow:last-child{border-bottom:none}',
+      '.__dh_listRowPick{cursor:pointer}',
+      '.__dh_listRowPick:hover{background:var(--dsw-alias-bg-layer-3,#f2f4f7)}',
+      '.__dh_warn{color:var(--dsw-alias-state-error-primary,#f85149);font-weight:600}',
     ].join('')
 
     /* ---------------- connection plumbing ---------------- */
@@ -448,63 +482,288 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /* ---------------- composer review banner ---------------- */
+    /* ---------------- composer overlay: review card + hooks browser ---------------- */
 
-    function ReviewStrip() {
+    // One overlay above the composer holds both views. `/hooks` opens the
+    // browser, the review card opens it too.
+    const panel = { open: false, eventName: null }
+    const panelListeners = new Set()
+
+    function setPanel(next) {
+      Object.assign(panel, next)
+      for (const listener of panelListeners) listener()
+    }
+
+    function openBrowser(eventName) {
+      setPanel({ open: true, eventName: eventName ?? null })
+    }
+
+    function closeBrowser() {
+      setPanel({ open: false, eventName: null })
+    }
+
+    function usePanel() {
+      const [, bump] = React.useState(0)
+      React.useEffect(() => {
+        const listener = () => bump((value) => value + 1)
+        panelListeners.add(listener)
+        return () => {
+          panelListeners.delete(listener)
+        }
+      }, [])
+      return panel
+    }
+
+    function HooksOverlay() {
       const t = (key, values) => format(translate(key), values)
       const conn = useConnection()
+      const view = usePanel()
+      const [data, setData] = React.useState(null)
+      const [stats, setStats] = React.useState(null)
       const [pending, setPending] = React.useState([])
-      const [hidden, setHidden] = React.useState(false)
-      const [busy, setBusy] = React.useState(false)
+      const [dismissed, setDismissed] = React.useState(false)
+      const [busy, setBusy] = React.useState(null)
+      const [error, setError] = React.useState(null)
 
-      React.useEffect(() => {
-        if (!conn) return undefined
-        let alive = true
-        call('review', {})
-          .then((value) => {
-            if (alive) setPending(value?.hooks ?? [])
-          })
-          .catch(() => {
-            if (alive) setPending([])
-          })
-        return () => {
-          alive = false
+      const refresh = React.useCallback(async () => {
+        if (!conn) return
+        try {
+          setData(await call('list', {}))
+          setError(null)
+        } catch (failure) {
+          setError(failure?.message ?? String(failure))
+        }
+        try {
+          setStats(await call('stats', {}))
+        } catch {
+          setStats(null)
+        }
+        try {
+          const value = await call('review', {})
+          setPending(value?.hooks ?? [])
+        } catch {
+          setPending([])
         }
       }, [conn])
 
-      if (hidden || pending.length === 0) return null
+      React.useEffect(() => {
+        refresh()
+      }, [refresh])
 
-      const allowAll = async () => {
-        setBusy(true)
+      const act = async (key, action) => {
+        setBusy(key)
         try {
-          await call('trustAll', {})
-        } catch {
-          /* the settings section reports the failure */
+          const result = await action()
+          if (result && result.ok === false) throw new Error(result.error ?? 'hooks call failed')
+          await refresh()
+        } catch (failure) {
+          setError(failure?.message ?? String(failure))
+        } finally {
+          setBusy(null)
         }
-        setBusy(false)
-        setPending([])
-        setHidden(true)
       }
+
+      const needsReview = (hook) => hook.trust === 'Untrusted' || hook.trust === 'Modified'
+      const showCard = pending.length > 0 && !dismissed
+      if (!showCard && !view.open) return null
+
+      const hooks = data?.hooks ?? []
+      const events = data?.events ?? []
+      const handlers = view.eventName
+        ? hooks.filter((hook) => hook.eventName === view.eventName)
+        : []
 
       return h(
         'div',
-        { className: '__dh_banner' },
-        h(
-          'span',
-          { className: '__dh_bannerText' },
-          t('reviewBanner', { count: pending.length }),
-          h('span', { className: '__dh_bannerHint' }, ` ${t('reviewSettingsHint')}`),
-        ),
-        h(
-          'button',
-          { className: '__dh_btn', disabled: busy, onClick: () => setHidden(true) },
-          t('notNow'),
-        ),
-        h(
-          'button',
-          { className: '__dh_btn __dh_btnPrimary', disabled: busy, onClick: allowAll },
-          t('allowAll'),
-        ),
+        { className: '__dh_root' },
+        showCard
+          ? h(
+              'div',
+              { className: '__dh_card' },
+              h('div', { className: '__dh_cardTitle' }, t('reviewTitle')),
+              h('div', { className: '__dh_cardCount' }, t('reviewCount', { count: pending.length })),
+              h('div', { className: '__dh_cardHint' }, t('reviewNote')),
+              h(
+                'div',
+                { className: '__dh_actions' },
+                h(
+                  'button',
+                  { className: '__dh_btn', disabled: busy !== null, onClick: () => openBrowser() },
+                  t('reviewHooks'),
+                ),
+                h(
+                  'button',
+                  {
+                    className: '__dh_btn __dh_btnPrimary',
+                    disabled: busy !== null,
+                    onClick: () =>
+                      act('trustAll', async () => {
+                        await call('trustAll', {})
+                        setDismissed(true)
+                      }),
+                  },
+                  t('trustAllContinue'),
+                ),
+                h(
+                  'button',
+                  { className: '__dh_btn', disabled: busy !== null, onClick: () => setDismissed(true) },
+                  t('continueWithout'),
+                ),
+              ),
+            )
+          : null,
+        error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
+        view.open
+          ? h(
+              'div',
+              { className: '__dh_panel' },
+              h(
+                'div',
+                { className: '__dh_panelHead' },
+                h('span', { className: '__dh_event' }, view.eventName ? t('handlers') : t('events')),
+                h(
+                  'span',
+                  { className: '__dh_count' },
+                  view.eventName ? view.eventName : t('browserSubtitle'),
+                ),
+                h(
+                  'span',
+                  { className: '__dh_actions' },
+                  view.eventName
+                    ? h('button', { className: '__dh_btn', onClick: () => openBrowser() }, t('back'))
+                    : null,
+                  h('button', { className: '__dh_btn', onClick: closeBrowser }, t('close')),
+                ),
+              ),
+              view.eventName
+                ? h(
+                    'div',
+                    { className: '__dh_list' },
+                    handlers.length === 0
+                      ? h('div', { className: '__dh_empty' }, t('emptyGroup'))
+                      : handlers.map((hook) =>
+                          h(
+                            'div',
+                            { key: hook.key, className: '__dh_listRow' },
+                            h(
+                              'span',
+                              { className: needsReview(hook) ? '__dh_runMark __dh_warn' : '__dh_runMark' },
+                              needsReview(hook) ? '!' : hook.enabled === false ? '-' : 'x',
+                            ),
+                            h('span', { className: '__dh_event' }, hookTitle(hook)),
+                            h('span', { className: '__dh_name' }, hook.sourceLabel || hook.source || ''),
+                            h(
+                              'span',
+                              { className: '__dh_actions' },
+                              h(
+                                'span',
+                                { className: TRUST_CLASS[hook.trust] ?? '__dh_badge' },
+                                t(hook.trust.toLowerCase()),
+                              ),
+                              h(
+                                'label',
+                                { className: '__dh_switch' },
+                                h('input', {
+                                  type: 'checkbox',
+                                  checked: hook.enabled === true,
+                                  disabled: busy === hook.key,
+                                  onChange: (event) =>
+                                    act(hook.key, () =>
+                                      call('setEnabled', { key: hook.key, enabled: event.target.checked }),
+                                    ),
+                                }),
+                              ),
+                              hook.trust === 'Trusted' || hook.trust === 'Managed'
+                                ? h(
+                                    'button',
+                                    {
+                                      className: '__dh_btn',
+                                      disabled: busy === hook.key,
+                                      onClick: () =>
+                                        act(hook.key, () => call('setTrusted', { key: hook.key, trusted: false })),
+                                    },
+                                    t('revoke'),
+                                  )
+                                : h(
+                                    'button',
+                                    {
+                                      className: '__dh_btn __dh_btnPrimary',
+                                      disabled: busy === hook.key,
+                                      onClick: () =>
+                                        act(hook.key, () => call('setTrusted', { key: hook.key, trusted: true })),
+                                    },
+                                    t('trust'),
+                                  ),
+                            ),
+                          ),
+                        ),
+                  )
+                : h(
+                    'div',
+                    { className: '__dh_list' },
+                    events.length === 0
+                      ? h('div', { className: '__dh_empty' }, t('empty'))
+                      : events.map((row) =>
+                          h(
+                            'div',
+                            {
+                              key: row.eventName,
+                              className: '__dh_listRow __dh_listRowPick',
+                              onClick: () => openBrowser(row.eventName),
+                            },
+                            h(
+                              'span',
+                              { className: row.needsReview > 0 ? '__dh_runMark __dh_warn' : '__dh_runMark' },
+                              row.needsReview > 0 ? '!' : ' ',
+                            ),
+                            h('span', { className: '__dh_event' }, row.eventName),
+                            h('span', { className: '__dh_count' }, `${row.active}/${row.installed}`),
+                          ),
+                        ),
+                  ),
+              stats
+                ? h(
+                    'div',
+                    { className: '__dh_stats' },
+                    h(
+                      'div',
+                      { className: '__dh_rowHead' },
+                      h('span', { className: '__dh_event' }, t('recentRuns')),
+                      h(
+                        'span',
+                        { className: '__dh_count' },
+                        `${t('runs')} ${stats.runs} · ${t('blocked')} ${stats.blocked} · ${t('failed')} ${stats.failed}`,
+                      ),
+                    ),
+                    (stats.history ?? []).length === 0
+                      ? h('div', { className: '__dh_empty' }, t('noRuns'))
+                      : (stats.history ?? []).slice(0, 10).map((row, index) =>
+                          h(
+                            'div',
+                            { key: `${row.at}-${index}`, className: '__dh_runRow' },
+                            h(
+                              'span',
+                              {
+                                className:
+                                  row.status === 'ok' ? '__dh_runMark' : '__dh_runMark __dh_runMarkBad',
+                              },
+                              STATUS_MARK[row.status] ?? '?',
+                            ),
+                            h('span', { className: '__dh_event' }, row.eventName),
+                            h('span', { className: '__dh_name' }, row.title),
+                            h('span', { className: '__dh_count' }, row.sourceLabel || row.source || ''),
+                            h(
+                              'span',
+                              { className: '__dh_actions __dh_count' },
+                              t(STATUS_KEY[row.status] ?? 'statusFailed'),
+                              row.durationMs ? ` ${row.durationMs}ms` : '',
+                            ),
+                          ),
+                        ),
+                  )
+                : null,
+            )
+          : null,
       )
     }
 
@@ -538,18 +797,32 @@ window.__ModuleLoader__.load({
             client.slots.register(
               {
                 name: 'conversation.input.overlay',
-                id: 'hooks-review',
+                id: 'hooks-overlay',
                 order: 40,
                 locale: NS,
                 inject: () => ({ t: translate }),
               },
-              ReviewStrip,
+              HooksOverlay,
             ),
           )
         } catch {
           /* the composer overlay slot is optional: without it the settings page is the only entry */
         }
         setConnection(resolveHandle(client.connection))
+      })
+      // `/hooks` opens the browser instead of printing text, the way Codex does.
+      ctx.inject(['commandUi'], (scope) => {
+        const commandUi = scope.commandUi ?? scope
+        const effect = scope.effect ?? ((run) => run())
+        effect(
+          () =>
+            commandUi.decorate({
+              name: 'hooks',
+              available: () => true,
+              ui: { kind: 'action', run: () => openBrowser() },
+            }),
+          'dsh-hooks: /hooks browser',
+        )
       })
       ctx.inject(['connection'], (rpc) => {
         setConnection(resolveHandle(rpc))

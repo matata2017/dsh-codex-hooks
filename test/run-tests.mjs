@@ -27,6 +27,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import * as spec from './spec.mjs'
 import { runConformance, runConformanceSelfTest } from './plugin-conformance.mjs'
+import { runClientBundleCheck } from './client-bundle.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
@@ -898,6 +899,39 @@ section('I. 运行记录与 /hooks 文本（lib/runs.js）')
     assert(/No hooks found/.test(text), text)
     return 'hint'
   })
+
+  test('runs/事件行：按事件聚合，计数生效钩子与待审核数', () => {
+    const rows = runs.eventRows([
+      { eventName: 'Stop', trust: 'Trusted', enabled: true, runnable: true },
+      { eventName: 'UserPromptSubmit', trust: 'Untrusted', enabled: true, runnable: false },
+      { eventName: 'UserPromptSubmit', trust: 'Modified', enabled: true, runnable: false },
+      { eventName: 'UserPromptSubmit', trust: 'Trusted', enabled: false, runnable: false },
+    ])
+    assertEqual(rows.length, 2, 'event count')
+    // 事件顺序按 CODEX 事件表：UserPromptSubmit 在 Stop 之前
+    assertEqual(rows[0].eventName, 'UserPromptSubmit', 'first event')
+    assertEqual(rows[0].installed, 3, 'installed')
+    assertEqual(rows[0].active, 0, 'active')
+    assertEqual(rows[0].needsReview, 2, 'needsReview')
+    assertEqual(rows[1].eventName, 'Stop', 'second event')
+    assertEqual(rows[1].active, 1, 'active')
+    assertEqual(rows[1].needsReview, 0, 'needsReview')
+    return '2 events'
+  })
+
+  test('runs/事件行：没有钩子时返回空数组', () => {
+    assertEqual(runs.eventRows([]).length, 0, 'empty')
+    assertEqual(runs.eventRows(undefined).length, 0, 'undefined')
+    return 'empty'
+  })
+}
+
+// ---------------------------------------------------------------------------
+// J. 客户端 bundle（client.js）：审核卡片、事件列表、处理器列表、远程调用
+// ---------------------------------------------------------------------------
+section('J. 客户端 bundle 渲染（test/client-bundle.mjs）')
+for (const item of await runClientBundleCheck()) {
+  record(item.status, item.name, item.detail)
 }
 
 // ---------------------------------------------------------------------------

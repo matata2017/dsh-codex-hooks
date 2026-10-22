@@ -38,9 +38,9 @@ Codex 的 14 个事件对应到 dsh 自己的运行时事件：
 
 ## 审核、运行记录与 `/hooks`
 
-- **审核横幅** — 会话里出现指纹未知或已变更的 hook 时，输入框上方会出现一条提示，提供*稍后*与*全部信任*。批准即钉住当前指纹；其余情况到 **设置 → Hooks** 里逐个处理。
-- **最近运行** — Hooks 设置页顶部显示最近 200 次执行的 `运行 / 拦截 / 失败` 计数，以及最新若干行（状态、事件、hook、来源、耗时）。hook 的输出**不会**打印进对话，模型只会看到 handler 的 `additionalContext`。
-- **`/hooks`** — 不打开设置也能看到同一套信息：按来源的总数、还有多少待审核、运行计数与最近几次运行。它是标准的 dsh 斜杠命令（宿主组合了 `commands` 服务时注册），不会发给模型。
+- **审核卡片** — 会话里出现指纹未知或已变更的 hook 时，输入框上方会出现一张卡片，提供与 Codex 一样的三个选项：*查看钩子*、*全部信任并继续*、*暂不信任（钩子不会运行）*。批准即把当前指纹钉进 `$DSH_HOME/hooks.state.json`；其余情况到 **设置 → Hooks** 里逐个处理。
+- **最近运行** — 浏览器视图与 Hooks 设置页顶部显示最近 200 次执行的 `运行 / 拦截 / 失败` 计数，以及最新若干行（状态、事件、hook、来源、耗时）。hook 的输出**不会**打印进对话，模型只会看到 handler 的 `additionalContext`。运行记录和 Codex 一样只放在内存里，不落盘。
+- **`/hooks` 打开浏览器视图** — 在输入框敲 `/hooks` 会在输入框上方打开两级视图，和 Codex 一致：第一页按事件列出 `生效/已安装` 计数，待审核的事件行尾带 `!`；第二页列出该事件的处理器，带信任状态、启用开关和*信任*/*撤销*按钮。它是标准的 dsh 斜杠命令（宿主组合了 `commands` 服务时注册），不会发给模型。
 
 ## 安装
 
@@ -85,7 +85,7 @@ handler 类型：`command`、`mcp_tool`（会执行）、`prompt`、`agent`（�
 
 ## 验证状态
 
-- `node test/run-tests.mjs` → **84 passed, 0 failed, 0 skipped**，其中 8 条指纹取自真实 Codex 安装（`test/vectors.json`）。
+- `node test/run-tests.mjs` → **92 passed, 0 failed, 0 skipped**，其中 8 条指纹取自真实 Codex 安装（`test/vectors.json`）。
 - `UserPromptSubmit` 在真实 dsh 会话里跑通：示例 hook 每次提交提示词会打印一行 `echo-hook received event=…`。
 - `selftest/host-e2e.mjs` 对着真实 profile 验证宿主侧。
 

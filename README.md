@@ -40,9 +40,9 @@ Default timeout is 600s, except `SessionEnd` (1s default, 3s maximum) so shutdow
 
 ## Review, recent runs and `/hooks`
 
-- **Review banner** — when a session finds hooks whose fingerprint is unknown or changed, a strip above the composer offers *Not now* / *Allow all*. Approving pins the current fingerprints; anything else is edited later in **Settings → Hooks**, where trust is granted one hook at a time.
-- **Recent runs** — the top of the Hooks settings page shows `Runs / Blocked / Failed` for the last 200 executions plus the newest rows (status, event, hook, source, duration). Hook output is *not* printed into the conversation; the model only ever sees a handler's `additionalContext`.
-- **`/hooks`** — the same picture from the composer, without opening settings: totals per source, how many still need review, run counters and the newest runs. It is a normal dsh slash command (registered when the host composes the `commands` service), so it never reaches the model.
+- **Review card** — when a session finds hooks whose fingerprint is unknown or changed, a card above the composer offers the same three choices as Codex: *Review hooks*, *Trust all and continue*, *Continue without trusting (hooks won't run)*. Approving pins the current fingerprints in `$DSH_HOME/hooks.state.json`; anything else is edited later in **Settings → Hooks**, where trust is granted one hook at a time.
+- **`/hooks` opens a browser** — typing `/hooks` in the composer opens a two level view above it, exactly like Codex: the first page lists the hook events with `active/installed` and a `!` marker on the events that need review, the second page lists the handlers of one event with their trust state, an on/off switch and a *Trust* / *Revoke* button. It is a normal dsh slash command (registered when the host composes the `commands` service), so it never reaches the model.
+- **Recent runs** — the browser view and the top of the Hooks settings page show `Runs / Blocked / Failed` for the last 200 executions plus the newest rows (status, event, hook, source, duration). Hook output is *not* printed into the conversation; the model only ever sees a handler's `additionalContext`. The run log lives in memory for the session, like Codex's, and is not written to disk.
 
 ## Install
 
@@ -87,7 +87,7 @@ Handler types: `command`, `mcp_tool` (both executable), `prompt`, `agent` (parse
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **84 passed, 0 failed, 0 skipped**, including 8 fingerprints captured from a real Codex installation (`test/vectors.json`).
+- `node test/run-tests.mjs` → **92 passed, 0 failed, 0 skipped**, including 8 fingerprints captured from a real Codex installation (`test/vectors.json`).
 - `UserPromptSubmit` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 - `selftest/host-e2e.mjs` exercises the host side against a real profile.
 

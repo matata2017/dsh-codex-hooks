@@ -79,7 +79,12 @@ function createCtx() {
     },
     inject(deps, callback) {
       const resolved = deps.map((name) => services.get(name))
-      if (resolved.every((value) => value !== undefined)) callback(...resolved)
+      if (resolved.every((value) => value !== undefined)) {
+        // cordis hands the plugin body a child context, not the services themselves
+        const scope = { get: (name) => services.get(name) }
+        for (const [index, name] of deps.entries()) scope[name] = resolved[index]
+        callback(scope)
+      }
       return () => {}
     },
     effect(run) {
