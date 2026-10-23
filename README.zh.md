@@ -132,7 +132,7 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 ## 验证状态
 
 - `node test/run-tests.mjs` → **92 passed, 0 failed, 0 skipped**。
-- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **16 passed, 0 failed**。
+- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **17 passed, 0 failed**。
 - `agent/pre-step` 在真实 dsh 会话里跑通：每提交一次提示，示例钩子打印一行 `echo-hook received event=…`。
 
 ## 这里做不到的事

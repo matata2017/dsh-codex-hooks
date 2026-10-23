@@ -132,7 +132,7 @@ Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `age
 ## Verification status
 
 - `node test/run-tests.mjs` → **92 passed, 0 failed, 0 skipped**.
-- `node selftest/host-e2e.mjs` → **16 passed, 0 failed** against a real profile.
+- `node selftest/host-e2e.mjs` → **17 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
 
 ## What a hook cannot do here

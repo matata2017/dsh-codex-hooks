@@ -107,20 +107,29 @@ const hooksFile = {
   version: 1,
   hooks: {
     'agent/pre-step': [{ command: `node "${fixture}"`, statusMessage: 'selftest hook' }],
+    'tools/pre-execute': [
+      { matcher: 'Write', command: `node "${fixture}"`, statusMessage: 'selftest tool hook' },
+    ],
   },
 }
 writeFileSync(join(home, 'hooks.json'), JSON.stringify(hooksFile), 'utf8')
 
 const sourceKey = join(home, 'hooks.json')
-// Trust the hook the same way discovery sees it: parse, then hash the parsed row.
-const [discovered] = core.describeHooks(core.parseHooksFile(JSON.stringify(hooksFile)), {
+// Trust the hooks the same way discovery sees them: parse, then hash the parsed row.
+const discoveredRows = core.describeHooks(core.parseHooksFile(JSON.stringify(hooksFile)), {
   sourceKey,
   platform: process.platform,
 })
-const hookKey = discovered.key
-core.writeStateFile(join(home, 'hooks.state.json'), {
-  states: { [hookKey]: { enabled: true, trustedHash: discovered.hash } },
-})
+const hookKey = discoveredRows.find((row) => row.eventName === 'agent/pre-step').key
+const toolHookKey = discoveredRows.find((row) => row.eventName === 'tools/pre-execute').key
+core.writeStateFile(
+  join(home, 'hooks.state.json'),
+  {
+    states: Object.fromEntries(
+      discoveredRows.map((row) => [row.key, { enabled: true, trustedHash: row.hash }]),
+    ),
+  },
+)
 
 /* ---------------- run the plugin ---------------- */
 
@@ -295,6 +304,45 @@ await checkAsync('two turns keep separate run logs', async () => {
   const older = controller.stats('turn-a')
   assert.equal(older.turn, 'turn-a', 'older turn selectable')
   assert.equal(older.runs, 1, 'older turn keeps exactly its run')
+})
+
+/* The tool seam carries no turn: ToolExecutionInput has callId/name/arguments
+ * but nothing about the turn. A run there has to follow the turn the session is
+ * actually on, not the turn of the newest row — those differ as soon as a turn
+ * runs no hooks of its own, which is exactly what this block sets up. */
+await checkAsync('a run from a turn-less seam lands in the session current turn', async () => {
+  const controller = ctx.services.get('hooksController')
+  const agent = { id: 'agent-1', type: 'main', session: { id: 'session-1', header: { cwd: workspace } } }
+
+  // turn-c: the pre-step hook runs, so the newest row belongs to turn-c.
+  await ctx.emit(
+    'agent/pre-step',
+    {
+      agent,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'turn c' }] }],
+      turn: { id: 'turn-c' },
+      step: 1,
+      signal: new AbortController().signal,
+    },
+    async () => ({ kind: 'enter', messages: [] }),
+  )
+  // turn-d: no hook is configured on agent/request, so nothing is logged, but the
+  // host learns the turn from it.
+  await ctx.emit('agent/request', { agent, turn: { id: 'turn-d' }, step: 2 }, async () => ({ ok: true }))
+
+  await ctx.emit(
+    'tools/pre-execute',
+    { callId: 'call-1', rootCallId: 'call-1', name: 'Write', arguments: { path: 'x' }, agent },
+    async () => ({ kind: 'allow' }),
+  )
+
+  const current = controller.stats()
+  assert.equal(current.turn, 'turn-d', 'follows the marked turn, not the newest row')
+  assert.equal(current.runs, 1, 'the tool run is in turn-d')
+  assert.equal(current.history[0].eventName, 'tools/pre-execute', 'the row is the tool run')
+
+  const previous = controller.stats('turn-c')
+  assert.equal(previous.runs, 1, 'turn-c keeps only its own hook run')
 })
 
 console.log(`\n${passed} passed, ${failures.length} failed`)
