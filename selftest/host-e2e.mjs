@@ -345,6 +345,24 @@ await checkAsync('a run from a turn-less seam lands in the session current turn'
   assert.equal(previous.runs, 1, 'turn-c keeps only its own hook run')
 })
 
+console.log('\nstate file hygiene')
+/* Revoking trust on a hook that was never approved used to leave a blank entry
+ * behind in hooks.state.json, which then looked like a hook somebody had
+ * configured but never approved. The state file must record what was approved,
+ * not what was clicked. */
+await checkAsync('setTrusted(false) on a hook that was never trusted leaves no entry', async () => {
+  const controller = ctx.services.get('hooksController')
+  const state = JSON.parse(readFileSync(join(home, 'hooks.state.json'), 'utf8'))
+  delete state.states[toolHookKey]
+  core.writeStateFile(join(home, 'hooks.state.json'), state)
+
+  const result = controller.setTrusted(toolHookKey, false)
+  assert.equal(result.ok, true)
+
+  const after = JSON.parse(readFileSync(join(home, 'hooks.state.json'), 'utf8'))
+  assert.equal(toolHookKey in after.states, false, 'an empty entry was left behind')
+})
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length > 0) {
   for (const failure of failures) console.error(` - ${failure}`)
