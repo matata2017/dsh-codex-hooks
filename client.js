@@ -107,7 +107,7 @@ window.__ModuleLoader__.load({
       runHook: 'Hook',
       runTiming: 'Took',
       runReason: 'Reason',
-      skippedHint: '{count} hook(s) are still untrusted, so they have not run yet.',
+      skippedHint: '{count} hook(s) are not trusted yet, so they cannot run.',
     }
 
     const zh = {
@@ -191,7 +191,7 @@ window.__ModuleLoader__.load({
       runHook: '钩子',
       runTiming: '耗时',
       runReason: '原因',
-      skippedHint: '还有 {count} 个钩子未信任，因此没有运行。',
+      skippedHint: '还有 {count} 个钩子未信任，它们不会运行。',
     }
 
     const STYLE = [
@@ -1331,7 +1331,9 @@ window.__ModuleLoader__.load({
             : null,
           error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
           h('div', { className: '__dh_modalSection' }, t('runHistory')),
-          stats?.needsReview > 0
+          // Only say it when this turn shows nothing. With runs on screen the
+          // same sentence reads as "none of these runs happened".
+          stats?.needsReview > 0 && !(stats?.runs > 0)
             ? h(
                 'div',
                 { className: '__dh_dlgNote' },

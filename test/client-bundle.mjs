@@ -449,9 +449,13 @@ export async function runClientBundleCheck() {
       'runHistory',
       'agent/pre-step',
       'From Config',
-      'skippedHint',
     ]) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
+    }
+    // The turn has two runs, so "these hooks are not trusted" would read as if
+    // those two runs never happened.
+    if (rendered.includes('skippedHint')) {
+      throw new Error(`untrusted hint must not appear next to ${FAKE_STATS.runs} runs: ${rendered}`)
     }
     const sourceCell = findRow(renderOverlay(), '__dh_name')
     if (!sourceCell) throw new Error('history row has no source cell')
@@ -520,6 +524,25 @@ export async function runClientBundleCheck() {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
     return 'one turn'
+  })
+
+  await check('client/这一轮没跑任何钩子时才说明还有钩子没被信任', async () => {
+    // Same dialog, one difference: nothing ran in this turn. Now the sentence
+    // explains the empty list instead of contradicting the runs above it.
+    const saved = { runs: FAKE_STATS.runs, history: FAKE_STATS.history }
+    FAKE_STATS.runs = 0
+    FAKE_STATS.history = []
+    try {
+      await openStatsDialog()
+      const rendered = text(renderOverlay()).join(' ')
+      if (!rendered.includes('skippedHint')) {
+        throw new Error(`the untrusted hint should explain the empty turn: ${rendered}`)
+      }
+    } finally {
+      FAKE_STATS.runs = saved.runs
+      FAKE_STATS.history = saved.history
+    }
+    return 'hint on empty turn'
   })
 
   await check('client/统计对话框打开期间轮询实现准实时', async () => {

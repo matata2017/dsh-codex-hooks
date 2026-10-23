@@ -379,6 +379,21 @@ await checkAsync('setTrusted(false) on a hook that was never trusted leaves no e
   assert.equal(toolHookKey in after.states, false, 'an empty entry was left behind')
 })
 
+/* A state file that cannot be parsed reads back as empty. Writing that empty
+ * object over the real file erases every approval, so the write has to fail
+ * instead of silently eating the trust that is still on disk. */
+await checkAsync('a state file that cannot be read is never overwritten', async () => {
+  const controller = ctx.services.get('hooksController')
+  const statePath = join(home, 'hooks.state.json')
+  const broken = '{"version":1,"states":'
+  writeFileSync(statePath, broken)
+
+  const result = controller.setTrusted(toolHookKey, true)
+  assert.equal(result.ok, false, 'the write should be refused')
+  assert.ok(String(result.error).includes('cannot read'), `unexpected error: ${result.error}`)
+  assert.equal(readFileSync(statePath, 'utf8'), broken, 'the unreadable file was replaced')
+})
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length > 0) {
   for (const failure of failures) console.error(` - ${failure}`)
