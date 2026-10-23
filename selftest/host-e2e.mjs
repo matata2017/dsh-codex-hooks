@@ -152,7 +152,7 @@ check('registers the /hooks command with the commands service', () => {
   const outcome = definition.handler()
   assert.equal(outcome.kind, 'success')
   assert.match(outcome.text, /^Hooks: \d+ total/u)
-  assert.match(outcome.text, /Recent: \d+ runs/u)
+  assert.match(outcome.text, /This session: \d+ runs/u)
 })
 check('binds the hooks namespace', () => {
   const controller = ctx.services.get('hooksController')
@@ -258,6 +258,43 @@ await checkAsync('untrusted hooks are not executed', async () => {
     async () => ({ kind: 'enter', messages }),
   )
   assert.equal(decision.messages.length, 1)
+})
+
+/* ---------------- turn scoping (the stats panel bug) ---------------- */
+
+console.log('\nturn scoping')
+// Restore trust, then drive two turns: the panel must show one turn at a time
+// instead of one session-cumulative blob that never changes between turns.
+ctx.services.get('hooksController').setTrusted(hookKey, true)
+
+async function runTurn(turnId, prompt) {
+  const agent = {
+    id: 'agent-1',
+    type: 'main',
+    session: { id: 'session-1', header: { cwd: workspace } },
+  }
+  const messages = [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
+  return ctx.emit(
+    'agent/pre-step',
+    { agent, messages, turn: { id: turnId }, step: 1, signal: new AbortController().signal },
+    async () => ({ kind: 'enter', messages }),
+  )
+}
+
+await checkAsync('two turns keep separate run logs', async () => {
+  await runTurn('turn-a', 'first turn')
+  await runTurn('turn-b', 'second turn')
+
+  const controller = ctx.services.get('hooksController')
+  const current = controller.stats()
+  assert.equal(current.turn, 'turn-b', 'current turn is the latest')
+  assert.equal(current.runs, 1, 'current turn has its own run')
+  assert.equal(current.session.runs >= 2, true, 'session totals stay cumulative')
+  assert.equal(current.turns.length >= 2, true, 'turn index lists both turns')
+
+  const older = controller.stats('turn-a')
+  assert.equal(older.turn, 'turn-a', 'older turn selectable')
+  assert.equal(older.runs, 1, 'older turn keeps exactly its run')
 })
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

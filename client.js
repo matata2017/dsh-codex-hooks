@@ -145,6 +145,12 @@ window.__ModuleLoader__.load({
       statusBlocked: '被拦截',
       statusFailed: '失败',
       statusSkipped: '已跳过',
+      statusRunning: '运行中',
+      turnFilter: '轮次',
+      currentTurn: '当前轮',
+      turnLabel: '第 {value} 轮',
+      noRunsTurn: '这一轮还没有钩子运行过。',
+      sessionTotal: '本会话累计：{runs} 次运行 · {blocked} 次拦截 · {failed} 次失败',
       reviewTitle: '审查钩子',
       reviewCount: '{count} 个钩子是新的或已被修改。',
       reviewNote: '信任后钩子可以在你的机器上执行命令。',
@@ -178,6 +184,8 @@ window.__ModuleLoader__.load({
 
     const STYLE = [
       '.__dh_root{display:flex;flex-direction:column;gap:14px;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-primary,#1f2328)}',
+      '.__dh_select{font:inherit;color:inherit;background:var(--dsw-alias-bg-layer-3,#fff);border:1px solid var(--dsw-alias-border-l4,#dce2eb);border-radius:8px;padding:4px 8px;max-width:62%}',
+      '.__dh_statLive{color:var(--dsw-alias-state-business-primary,#3964fe)}',
       '.__dh_title{font-size:16px;font-weight:600;margin:0}',
       '.__dh_subtitle{font-size:12px;color:var(--dsw-alias-label-tertiary,#6b7280);margin:0}',
       '.__dh_group{border:1px solid var(--dsw-alias-border-l2,#dce2eb);border-radius:10px;background:var(--dsw-alias-bg-layer-2,transparent)}',
@@ -342,9 +350,10 @@ window.__ModuleLoader__.load({
       blocked: 'statusBlocked',
       failed: 'statusFailed',
       skipped: 'statusSkipped',
+      running: 'statusRunning',
     }
 
-    const STATUS_MARK = { ok: '\u2713', blocked: '\u2715', failed: '!', skipped: '-' }
+    const STATUS_MARK = { ok: '\u2713', blocked: '\u2715', failed: '!', skipped: '-', running: '\u2026' }
 
     /* ---------------- component ---------------- */
 
@@ -1122,11 +1131,17 @@ window.__ModuleLoader__.load({
     /* ---------------- hook stats dialog (Codex style) ---------------- */
 
     // Codex shows "Hook stats" from a message action: a dialog with the run
-    // counters and the run history.
+    // counters and the run history. Runs are turn-scoped — Codex tags every
+    // HookStarted/HookCompleted notification with the turn that triggered it —
+    // so the dialog reads one turn at a time and offers a switcher for the
+    // rest. Codex pushes those notifications live; a plugin owns no push
+    // channel (the gateway's forwarded-event source is app-owned), so the
+    // dialog polls while it is open.
     function HooksStatsDialog() {
       const t = (key, values) => format(translate(key), values)
       const conn = useConnection()
       const [stats, setStats] = React.useState(null)
+      const [turn, setTurn] = React.useState(null)
       const [error, setError] = React.useState(null)
       const [openRun, setOpenRun] = React.useState(null)
       const dialogRef = React.useRef(null)
@@ -1134,16 +1149,29 @@ window.__ModuleLoader__.load({
       const refresh = React.useCallback(async () => {
         if (!conn) return
         try {
-          setStats(await call('stats', {}))
+          const value = await call('stats', { turn })
+          // The host reads the newest session, so a selected turn can stop
+          // existing (session switch) or age out of the 200 row buffer. Follow
+          // the host instead of pinning the picker to a turn it no longer has.
+          if (turn !== null && value?.turn !== turn) setTurn(null)
+          setStats(value)
           setError(null)
         } catch (failure) {
           setError(failure?.message ?? String(failure))
         }
-      }, [conn])
+      }, [conn, turn])
 
       React.useEffect(() => {
         refresh()
       }, [refresh])
+
+      // Live updates while the dialog is open: Codex emits started/completed
+      // notifications per run; polling is the closest a plugin can get.
+      React.useEffect(() => {
+        if (!conn) return undefined
+        const timer = setInterval(refresh, 1500)
+        return () => clearInterval(timer)
+      }, [conn, refresh])
 
       React.useEffect(() => {
         const onKey = (event) => {
@@ -1165,7 +1193,10 @@ window.__ModuleLoader__.load({
       }, [])
 
       const history = stats?.history ?? []
-      return createPortal(        h(
+      const turns = stats?.turns ?? []
+      const session = stats?.session ?? { runs: 0, blocked: 0, failed: 0 }
+      return createPortal(
+        h(
           'div',
           {
             className: '__dh_modal __dh_dlgCenter',
@@ -1186,9 +1217,33 @@ window.__ModuleLoader__.load({
                 'aria-label': t('close'),
                 onClick: closeOverlay,
               },
-              '×',
+              '\u00d7',
             ),
           ),
+          turns.length > 1
+            ? h(
+                'div',
+                { className: '__dh_statRow' },
+                h('span', null, t('turnFilter')),
+                h(
+                  'select',
+                  {
+                    className: '__dh_select',
+                    value: turn ?? '',
+                    'aria-label': t('turnFilter'),
+                    onChange: (event) => setTurn(event.target.value === '' ? null : event.target.value),
+                  },
+                  h('option', { value: '' }, t('currentTurn')),
+                  turns.map((entry) =>
+                    h(
+                      'option',
+                      { key: entry.turn, value: entry.turn },
+                      `${t('turnLabel', { value: entry.label })} \u00b7 ${entry.runs} \u00b7 ${clockTime(entry.lastAt)}`,
+                    ),
+                  ),
+                ),
+              )
+            : null,
           h(
             'div',
             { className: '__dh_statRow' },
@@ -1207,6 +1262,14 @@ window.__ModuleLoader__.load({
             h('span', null, t('failed')),
             h('span', null, String(stats?.failed ?? 0)),
           ),
+          stats?.running > 0
+            ? h(
+                'div',
+                { className: '__dh_statRow __dh_statLive' },
+                h('span', null, t('statusRunning')),
+                h('span', null, String(stats.running)),
+              )
+            : null,
           error ? h('div', { className: '__dh_error' }, t('error', { message: error })) : null,
           h('div', { className: '__dh_modalSection' }, t('runHistory')),
           stats?.needsReview > 0
@@ -1217,7 +1280,7 @@ window.__ModuleLoader__.load({
               )
             : null,
           history.length === 0
-            ? h('div', { className: '__dh_empty' }, t('noRuns'))
+            ? h('div', { className: '__dh_empty' }, stats === null ? t('loading') : turns.length === 0 ? t('noRuns') : t('noRunsTurn'))
             : h(
                 'div',
                 { className: '__dh_history' },
@@ -1255,10 +1318,16 @@ window.__ModuleLoader__.load({
                   )
                 }),
               ),
+          h(
+            'div',
+            { className: '__dh_dlgNote' },
+            t('sessionTotal', { runs: session.runs, blocked: session.blocked, failed: session.failed }),
+          ),
         ),
         document.body,
       )
     }
+
 
     /* ---------------- overlay host ---------------- */
 

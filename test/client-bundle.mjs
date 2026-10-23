@@ -55,9 +55,13 @@ FAKE_DATA.groups = [
 ]
 
 const FAKE_STATS = {
+  scope: 'turn',
+  turn: 'sess#3',
+  label: '3',
   runs: 2,
   blocked: 1,
   failed: 0,
+  running: 0,
   needsReview: 1,
   history: [
     {
@@ -70,8 +74,14 @@ const FAKE_STATS = {
       path: 'C:/Users/x/.dsh/hooks.json',
       status: 'blocked',
       durationMs: 12,
+      turn: 'sess#3',
     },
   ],
+  turns: [
+    { turn: 'sess#3', label: '3', runs: 2, blocked: 1, failed: 0, firstAt: 't2', lastAt: 't3' },
+    { turn: 'sess#2', label: '2', runs: 1, blocked: 0, failed: 0, firstAt: 't0', lastAt: 't1' },
+  ],
+  session: { runs: 5, blocked: 2, failed: 1, running: 0, history: [] },
 }
 
 const FAKE_REVIEW = {
@@ -212,6 +222,7 @@ export async function runClientBundleCheck() {
     addEventListener() {},
     removeEventListener() {},
   }
+  const intervals = []
   const document = {
     createElement: () => ({ textContent: '', remove() {} }),
     head: { append() {} },
@@ -234,8 +245,13 @@ export async function runClientBundleCheck() {
       window,
       document,
       console,
-      setInterval,
-      clearInterval,
+      setInterval: (fn, ms) => {
+        intervals.push({ fn, ms })
+        return intervals.length
+      },
+      clearInterval: (id) => {
+        if (id > 0 && id <= intervals.length) intervals[id - 1] = null
+      },
       setTimeout,
       clearTimeout,
       KeyboardEvent: class KeyboardEvent {
@@ -255,10 +271,16 @@ export async function runClientBundleCheck() {
   const decorations = []
   const connection = {
     rpc: {
-      call: async (route, method) => {
+      call: async (route, method, payload) => {
         calls.push(method)
         if (method === 'hooks/list') return { ok: true, value: FAKE_DATA }
-        if (method === 'hooks/stats') return { ok: true, value: FAKE_STATS }
+        if (method === 'hooks/stats') {
+          // Mirror the host: a requested turn is honoured only while it is still
+          // in the index; otherwise stats() falls back to the current turn.
+          const requested = payload?.args?.turn ?? null
+          const known = FAKE_STATS.turns.some((entry) => entry.turn === requested)
+          return { ok: true, value: { ...FAKE_STATS, requested, turn: known ? requested : FAKE_STATS.turn } }
+        }
         if (method === 'hooks/review') return { ok: true, value: FAKE_REVIEW }
         return { ok: true, value: { ok: true } }
       },
@@ -425,6 +447,54 @@ export async function runClientBundleCheck() {
     const sourceText = text(sourceCell).join(' ').trim()
     if (sourceText !== 'From Config') throw new Error(`history row must show the group, got "${sourceText}"`)
     return 'modal'
+  })
+
+  // The action button toggles, and earlier checks may have left a dialog
+  // open: always start from a closed overlay.
+  const ensureClosed = async () => {
+    for (let round = 0; round < 4; round += 1) {
+      const close = findRow(renderOverlay(), '__dh_iconBtn')
+      if (!close) return
+      close.props.onClick()
+      await settle()
+    }
+  }
+  const openStatsDialog = async () => {
+    await ensureClosed()
+    const button = findRow(renderAction(), '__dh_actionBtn')
+    if (!button) throw new Error('message action button not rendered')
+    button.props.onClick()
+    await settle()
+  }
+
+  await check('client/统计对话框按轮次展示并带轮次切换器', async () => {
+    await openStatsDialog()
+    const rendered = text(renderOverlay()).join(' ')
+    // Turn switcher: more than one turn in the index renders the filter row.
+    for (const needle of ['turnFilter', 'currentTurn', 'turnLabel']) {
+      if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
+    }
+    const select = findRow(renderOverlay(), '__dh_select')
+    if (!select) throw new Error('turn switcher select not rendered')
+    if (select.props.value !== '') throw new Error('default view must be the current turn')
+    // Session totals stay visible under the per-turn counters.
+    if (!rendered.includes('sessionTotal')) throw new Error('session totals line missing')
+    // Switching turns re-reads stats for the selected turn.
+    const before = calls.length
+    select.props.onChange({ target: { value: 'sess#2' } })
+    renderOverlay()
+    await settle()
+    if (calls.length <= before) throw new Error('switching turns did not re-read stats')
+    return 'turn-scoped'
+  })
+
+  await check('client/统计对话框打开期间轮询实现准实时', async () => {
+    await openStatsDialog()
+    // The fake React runs effects on every render and never runs cleanups, so
+    // assert on the interval the poll effect registers (1.5s), not on counts.
+    const polls = intervals.filter((entry) => entry && entry.ms === 1500)
+    if (polls.length === 0) throw new Error('no 1500ms poll interval registered while the dialog is open')
+    return '1500ms poll'
   })
 
   await check('client/运行历史可以展开看钩子名与耗时', async () => {

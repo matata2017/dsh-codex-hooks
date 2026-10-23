@@ -823,16 +823,110 @@ section('G. 运行记录与 /hooks 文本（lib/runs.js）')
 
   test('runs/环形缓冲：超出上限丢最旧的，最新在前', () => {
     const log = runs.createRunLog({ limit: 3 })
-    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }])
-    log.record('agent/turn-stopping', [{ key: 'b', status: 'failed' }])
-    log.record('SessionStart', [{ key: 'c', status: 'blocked' }])
-    log.record('tools/pre-execute', [{ key: 'd', status: 'ok' }])
+    const ctx = { sessionId: 's1', turnKey: 's1#1', agentId: 'a1' }
+    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], ctx)
+    log.record('agent/turn-stopping', [{ key: 'b', status: 'failed' }], ctx)
+    log.record('SessionStart', [{ key: 'c', status: 'blocked' }], ctx)
+    log.record('tools/pre-execute', [{ key: 'd', status: 'ok' }], ctx)
     const stats = log.stats()
     assertEqual(stats.runs, 3, 'runs')
     assertEqual(stats.history[0].key, 'd', 'newest first')
     assertEqual(stats.history.at(-1).key, 'b', 'oldest dropped')
     assertEqual(stats.blocked, 1, 'blocked counter')
     return 'trimmed to 3'
+  })
+
+  test('runs/turn 作用域：stats() 只读当前轮，session 给累计', () => {
+    const log = runs.createRunLog({ limit: 50 })
+    const t1 = { sessionId: 's1', turnKey: 's1#1' }
+    const t2 = { sessionId: 's1', turnKey: 's1#2' }
+    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], t1)
+    log.record('agent/pre-step', [{ key: 'b', status: 'blocked' }], t2)
+    log.record('agent/turn-stopping', [{ key: 'c', status: 'ok' }], t2)
+
+    const current = log.stats()
+    assertEqual(current.scope, 'turn', 'scope')
+    assertEqual(current.turn, 's1#2', 'current turn is the newest')
+    assertEqual(current.runs, 2, 'current turn runs')
+    assertEqual(current.blocked, 1, 'current turn blocked')
+    assertEqual(current.session.runs, 3, 'session totals stay cumulative')
+    assertEqual(current.turns.length, 2, 'turn index')
+
+    const older = log.stats({ turn: 's1#1' })
+    assertEqual(older.runs, 1, 'older turn runs')
+    assertEqual(older.history[0].key, 'a', 'older turn row')
+
+    // A turn that already aged out of the 200 row buffer must not wedge the
+    // dialog on "nothing ran this turn": fall back to the current one.
+    const unknown = log.stats({ turn: 's1#99' })
+    assertEqual(unknown.requested, 's1#99', 'request echoed back')
+    assertEqual(unknown.turn, 's1#2', 'unknown turn falls back to the current one')
+    assertEqual(unknown.runs, 2, 'fallback scopes to the current turn')
+    return 'turn-scoped'
+  })
+
+  test('runs/会话隔离：新会话不显示上个会话的轮次', () => {
+    const log = runs.createRunLog({ limit: 50 })
+    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], { sessionId: 'session-A', turnKey: 'session-A#1' })
+    log.record('agent/pre-step', [{ key: 'b', status: 'ok' }], { sessionId: 'session-B', turnKey: 'session-B#1' })
+
+    const stats = log.stats()
+    assertEqual(stats.sessionId, 'session-B', 'reads the newest session')
+    assertEqual(stats.turns.length, 1, 'only this session turns')
+    assertEqual(stats.turns[0].turn, 'session-B#1', 'turn belongs to this session')
+    assertEqual(stats.session.runs, 1, 'session totals are per session')
+
+    const other = log.stats({ sessionId: 'session-A' })
+    assertEqual(other.turn, 'session-A#1', 'explicit session')
+    assertEqual(other.runs, 1, 'explicit session runs')
+    return 'session-B'
+  })
+
+  test('runs/start-finish：运行中可见，完成后落位', () => {
+    const log = runs.createRunLog({ limit: 50 })
+    const ctx = { sessionId: 's1', turnKey: 's1#7' }
+    const hook = { key: 'k', group: 'config', groupLabel: 'From Config', sourceLabel: 'hooks.json', sourcePath: 'C:/x/hooks.json' }
+    const rowId = log.start('agent/pre-step', hook, ctx)
+    let stats = log.stats()
+    assertEqual(stats.running, 1, 'running row counted')
+    assertEqual(stats.history[0].status, 'running', 'running status')
+    assertEqual(stats.history[0].turn, 's1#7', 'row carries the turn')
+
+    log.finish(rowId, 'agent/pre-step', { key: 'k', status: 'blocked', reason: 'nope', durationMs: 9 }, ctx)
+    stats = log.stats()
+    assertEqual(stats.running, 0, 'no longer running')
+    assertEqual(stats.history[0].status, 'blocked', 'finished status')
+    assertEqual(stats.history[0].reason, 'nope', 'reason kept')
+    assertEqual(stats.history[0].durationMs, 9, 'duration kept')
+    return 'running -> blocked'
+  })
+
+  test('runs/turnLabel：取 # 后面的轮次号', () => {
+    assertEqual(runs.turnLabel('s1#3'), '3', 'session#turn')
+    assertEqual(runs.turnLabel('3'), '3', 'bare number')
+    assertEqual(runs.turnLabel(null), '', 'null')
+    return '3'
+  })
+
+  test('runs/无轮次的事件跟当前标记的轮走，不猜日志里最新的一轮', () => {
+    const log = runs.createRunLog({ limit: 50 })
+    // 轮 3 跑过钩子，轮 4 没有；工具类 seam 不带轮次，只能靠 markTurn 学到的当前轮。
+    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], { sessionId: 's1', turnKey: 's1#3' })
+    log.markTurn('s1', 's1#4')
+    log.record('tools/pre-execute', [{ key: 'b', status: 'ok' }], { sessionId: 's1' })
+
+    const stats = log.stats()
+    assertEqual(stats.turn, 's1#4', 'current turn comes from markTurn')
+    assertEqual(stats.runs, 1, 'the tool run lands in the marked turn, not the newest logged one')
+    assertEqual(stats.session.runs, 2, 'session totals')
+
+    // 没有标记过轮次的会话：宁可只进会话累计，也不塞进别人的轮。
+    const bare = runs.createRunLog({ limit: 50 })
+    bare.record('session/disposed', [{ key: 'c', status: 'ok' }], { sessionId: 's2' })
+    const unmarked = bare.stats()
+    assertEqual(unmarked.turn, null, 'no turn to attribute')
+    assertEqual(unmarked.session.runs, 1, 'session totals keep the row')
+    return 'marked turn'
   })
 
   test('runs/标题优先 statusMessage，其次命令名，最后 key', () => {
@@ -854,13 +948,21 @@ section('G. 运行记录与 /hooks 文本（lib/runs.js）')
         { eventName: 'SessionStart', key: 'c', trust: 'Trusted', enabled: false, group: 'config', sourceLabel: 'hooks.json' },
       ],
       stats: {
-        runs: 2,
-        blocked: 1,
+        turn: 's1#2',
+        runs: 1,
+        blocked: 0,
         failed: 0,
-        history: [
-          { eventName: 'agent/pre-step', title: 'echo-hook', sourceLabel: 'hooks.json', status: 'blocked', durationMs: 12, reason: 'nope' },
-          { eventName: 'agent/turn-stopping', title: 'stop', source: 'projects', status: 'ok', durationMs: 3 },
-        ],
+        history: [],
+        turns: [],
+        session: {
+          runs: 2,
+          blocked: 1,
+          failed: 0,
+          history: [
+            { eventName: 'agent/pre-step', title: 'echo-hook', sourceLabel: 'hooks.json', status: 'blocked', durationMs: 12, reason: 'nope', turn: 's1#2' },
+            { eventName: 'agent/turn-stopping', title: 'stop', source: 'projects', status: 'ok', durationMs: 3, turn: 's1#1' },
+          ],
+        },
       },
     })
     assert(/3 total/.test(text), `total missing: ${text}`)
@@ -874,7 +976,7 @@ section('G. 运行记录与 /hooks 文本（lib/runs.js）')
   })
 
   test('runs//hooks 文本：空目录给出提示而不是空白', () => {
-    const text = runs.hooksCommandText({ hooks: [], stats: { runs: 0, blocked: 0, failed: 0, history: [] } })
+    const text = runs.hooksCommandText({ hooks: [], stats: { runs: 0, blocked: 0, failed: 0, history: [], session: { runs: 0, blocked: 0, failed: 0, history: [] } } })
     assert(/No hooks found/.test(text), text)
     return 'hint'
   })
