@@ -138,7 +138,7 @@ Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `age
 ## Verification status
 
 - `node test/run-tests.mjs` → **97 passed, 0 failed, 0 skipped**.
-- `node selftest/host-e2e.mjs` → **18 passed, 0 failed** against a real profile.
+- `node selftest/host-e2e.mjs` → **19 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session once the hook is trusted: the example hook prints one `echo-hook received event=…` line per agent step (it fires before every step, so one prompt can produce several lines). A hook stays untrusted until you approve it in the review dialog or in Settings → Hooks; an untrusted hook never runs.
 
 ## What a hook cannot do here

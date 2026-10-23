@@ -345,6 +345,22 @@ await checkAsync('a run from a turn-less seam lands in the session current turn'
   assert.equal(previous.runs, 1, 'turn-c keeps only its own hook run')
 })
 
+/* The remote method has to accept `delta`, not just the log: the client sends
+ * it because turn numbers restart when the host does. */
+await checkAsync('stats() accepts the delta the client sends', async () => {
+  const controller = ctx.services.get('hooksController')
+  // What the client sends after the host restarted: a turn number the log has
+  // never seen (the counter restarted at 1) plus how far back it is.
+  const withDelta = controller.stats('gone', 1)
+  assert.equal(withDelta.resolved, 'offset', 'resolved by distance')
+  assert.equal(withDelta.turn, 'turn-c', 'one turn back from turn-d')
+  assert.equal(withDelta.runs, 1, 'the older turn keeps its run')
+
+  const tooFar = controller.stats('gone', 99)
+  assert.equal(tooFar.resolved, 'missing', 'nothing that far back is invented')
+  assert.equal(tooFar.runs, 0, 'and it reports no runs rather than borrowing some')
+})
+
 console.log('\nstate file hygiene')
 /* Revoking trust on a hook that was never approved used to leave a blank entry
  * behind in hooks.state.json, which then looked like a hook somebody had

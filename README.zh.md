@@ -138,7 +138,7 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 ## 验证状态
 
 - `node test/run-tests.mjs` → **97 passed, 0 failed, 0 skipped**。
-- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **18 passed, 0 failed**。
+- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **19 passed, 0 failed**。
 - `agent/pre-step` 在真实 dsh 会话里跑通（前提是钩子已被信任）：示例钩子每跑一步打印一行 `echo-hook received event=…`（它在 agent 循环的每一步之前触发，所以一次提示可能打印多行）。未信任的钩子不会执行，必须先在审查弹窗或「设置 → 钩子」里批准。
 
 ## 这里做不到的事
