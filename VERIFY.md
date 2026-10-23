@@ -1,4 +1,4 @@
-# VERIFY.md — @local/dsh-hooks 安装后验证清单
+# VERIFY.md — dsh-codex-hooks 安装后验证清单
 
 > 适用范围：DSH 原生插件 `dsh-codex-hooks`（DSH 自己的生命周期钩子，管理方式照 Codex）安装并重载 profile **之后**。
 > 本文件里的每一条都是**待执行**的检查，不是已经验证过的结论。执行者：Lead。
@@ -10,13 +10,13 @@
 
 | 项 | 值 | 说明 |
 |---|---|---|
-| DSH Web UI | <http://127.0.0.1:61621> | 已在本机运行 |
+| DSH Web UI | `dsh web` 打印的地址（端口每次重启都会变） | 已在本机运行 |
 | `DSH_HOME` | `C:\Users\Admin\.dsh`（env 可覆盖，默认 `~/.dsh`） | 插件的用户级配置与状态都放这里 |
 | 用户级 hooks 配置 | `$DSH_HOME/hooks.json` | 对应 UI 的 **From Config** |
 | 项目级 hooks 配置 | `<会话 cwd>/.dsh/hooks.json` | 对应 UI 的 **From Projects** |
 | 插件级 hooks 配置 | profile 的 `node_modules/<pkg>/hooks.json` | 对应 UI 的 **From Plugins** |
 | 状态文件 | `$DSH_HOME/hooks.state.json` | `{version:1, states:{"<key>":{enabled, trustedHash}}}` |
-| 状态 key 格式 | `<配置绝对路径>:<事件小写下划线>:<group>:<handler>` | 例：`C:\Users\Admin\.dsh\hooks.json:user_prompt_submit:0:0` |
+| 状态 key 格式 | `<配置绝对路径>:<事件小写下划线>:<group>:<handler>` | 例：`C:\Users\Admin\.dsh\hooks.json:agent_pre_step:0:0` |
 
 **安装后的第一步**：确认插件已被 profile 加载（`dsh --dump-config` 里能看到 `dsh-codex-hooks`，或 Web UI 设置里出现 Hooks 页）。若设置页没出现，先看 `VERIFY.md` 末尾的排查表，别急着排查 hook 本身。
 
@@ -51,7 +51,7 @@ cp D:/work/huanghao/dsh-hoos/examples/hooks.json \
 
 ### C1 — 设置页出现 Hooks 入口
 
-- **怎么做**：打开 <http://127.0.0.1:61621>，点左侧边栏底部的 **Settings**（或按 `Ctrl+,`），在弹出的设置面板左侧导航里找 **Hooks**。
+- **怎么做**：打开 `dsh web` 打印的地址，点左侧边栏底部的 **Settings**（或按 `Ctrl+,`），在弹出的设置面板左侧导航里找 **Hooks**。
 - **预期**：导航里多出一项 `Hooks`（文案可本地化为「Hooks」/「钩子」，含 Hook 字样即可）。
 - **通过**：导航项存在，点击后右侧渲染出 Hooks 页面（有标题 "Hooks" 和三个分组卡片）。
 - **失败**：导航里没有 Hooks 项，或点击后是空白页。
@@ -154,7 +154,7 @@ echo hook 默认输出 `hookSpecificOutput.additionalContext`，内容里含 `ec
 
 如果 UI 挂了、但不想卡在渲染上，优先用这两条：
 
-1. **宿主侧**：`/hooks` 斜杠命令（`list` / `enable` / `disable` / `trust` / `test`）应能列出同一批 hook。命令不存在说明 `lib/index.js` 没注册该命令。
+1. **宿主侧**：`/hooks` 斜杠命令会打印一份摘要（`Hooks: N total — X trusted, Y needs review …` + `This session: N runs` + 待审核清单 + 最近运行）。命令不存在说明 `lib/index.js` 没注册该命令。
 2. **浏览器控制台**：页面已加载时，客户端的 remote 调用是 `ctx.remote`（`@deepseek-ai/dsh-api-gateway/client`）。在设置页的组件里临时打一行，拿到 `{result:{ok,value}}` 后台返回的分组 JSON，再和 UI 对照——**若返回成功但 UI 空白，问题在渲染层，不在插件逻辑**。
 
 ---
@@ -180,7 +180,7 @@ echo hook 默认输出 `hookSpecificOutput.additionalContext`，内容里含 `ec
 
 | 症状 | 先查 |
 |---|---|
-| 设置页没有 Hooks 项 | 插件有没有进 profile 的 `dsh.profile.bundles`；`lib/client.js` 有没有 `ctx.slots.inject('settings.section', ...)`；`cordis.patch.yml` 有没有把客户端插件注进去；重载 profile 了没 |
+| 设置页没有 Hooks 项 | 插件有没有进 profile 的 `dsh.profile.bundles`；`client.js` 有没有 `ctx.slots.inject('settings.section', ...)`；`cordis.patch.yml` 有没有把客户端插件注进去；重载 profile 了没 |
 | 页面有但分组全空 | `$DSH_HOME/hooks.json` 是不是被读到了；文件是不是合法 JSON（`node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$DSH_HOME/hooks.json"`） |
 | 分组有了但 hook 不跑 | 信任状态是不是 Untrusted/Modified；`hooks.state.json` 里的 key 是不是和 `list` 返回的 key 完全一致；命令路径在当前 OS 下能不能执行（Windows 需 `commandWindows`） |
 | hook 跑了但没有 additionalContext | 输出是不是合法 JSON（必须是对象，且只含该事件允许的字段）；`hookSpecificOutput.hookEventName` 在不在 |
@@ -194,6 +194,9 @@ echo hook 默认输出 `hookSpecificOutput.additionalContext`，内容里含 `ec
 ```bash
 node test/run-tests.mjs            # 全部；退出码 0 = 全过，1 = 有失败
 node test/run-tests.mjs --quiet    # 只看失败与汇总
+node selftest/host-e2e.mjs         # 宿主侧端到端：真插件 + 临时 DSH_HOME + 真 hook 进程
 ```
 
-覆盖：指纹稳定性与变更检测、hooks.json 解析与归一化（DSH 原生格式）、matcher 四种形态、状态文件读写、四种信任状态、hook 输出 JSON 与退出码语义、echo hook 端到端、运行记录与 /hooks 文本、客户端 bundle 渲染。
+覆盖：指纹稳定性与变更检测、hooks.json 解析与归一化（DSH 原生格式）、matcher 四种形态、状态文件读写、四种信任状态、hook 输出 JSON 与退出码语义、echo hook 端到端、运行记录与轮次作用域、状态文件不留空条目、客户端 bundle 渲染。
+
+> `selftest/host-e2e.mjs` 会把 `DSH_HOME` 指到临时目录，**不会**碰你真实的 `hooks.state.json`。

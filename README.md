@@ -32,9 +32,11 @@ The screenshots come from a local dsh install running the two `echo-hook` entrie
 
 | Plugin | Verified against |
 | --- | --- |
-| 0.3.x | dsh `0.1.0-rc.6` (development and self-test host, web + desktop) |
+| 0.5.x | dsh `0.1.0-rc.6` (development and self-test host, web + desktop) |
 
 Newer dsh releases are untested: the plugin reads dsh's slot, command and remote-method contracts, and a host that renames one of those breaks it until it is updated.
+
+The client half binds to four dsh client packages — `@deepseek-ai/dsh-client-locale`, `@deepseek-ai/dsh-client-ui-settings`, `@deepseek-ai/dsh-client-ui-commands` and `@deepseek-ai/dsh-client-ui-chat`. The first three ship with the profile; `dsh-client-ui-chat` is what provides the `conversation.chat.turnTail` slot the "open the stats of the message you clicked" feature needs, and on some installs it only exists inside the app's own `node_modules`. If the message-level hook button shows no turn, that package was the missing piece.
 
 ## What it actually does
 
@@ -135,9 +137,9 @@ Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `age
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **93 passed, 0 failed, 0 skipped**.
-- `node selftest/host-e2e.mjs` → **17 passed, 0 failed** against a real profile.
-- `agent/pre-step` runs in a live dsh session: the example hook prints one `echo-hook received event=…` line per submitted prompt.
+- `node test/run-tests.mjs` → **94 passed, 0 failed, 0 skipped**.
+- `node selftest/host-e2e.mjs` → **18 passed, 0 failed** against a real profile.
+- `agent/pre-step` runs in a live dsh session once the hook is trusted: the example hook prints one `echo-hook received event=…` line per agent step (it fires before every step, so one prompt can produce several lines). A hook stays untrusted until you approve it in the review dialog or in Settings → Hooks; an untrusted hook never runs.
 
 ## What a hook cannot do here
 

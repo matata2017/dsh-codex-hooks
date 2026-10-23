@@ -32,9 +32,11 @@ English: [README.md](README.md)
 
 | 插件版本 | 验证过的 dsh |
 | --- | --- |
-| 0.3.x | dsh `0.1.0-rc.6`（开发与自测宿主，web 与 desktop） |
+| 0.5.x | dsh `0.1.0-rc.6`（开发与自测宿主，web 与 desktop） |
 
 更新的 dsh 版本没有验证过：插件读的是 dsh 的插槽、命令与远程方法契约，宿主改掉其中任何一个，插件在跟进之前就会坏。
+
+客户端这一半绑在四个 dsh 客户端包上 —— `@deepseek-ai/dsh-client-locale`、`@deepseek-ai/dsh-client-ui-settings`、`@deepseek-ai/dsh-client-ui-commands`、`@deepseek-ai/dsh-client-ui-chat`。前三个随 profile 一起装；`dsh-client-ui-chat` 提供 `conversation.chat.turnTail` 插槽，「点哪条消息就看哪一轮」靠的就是它，有些安装里它只存在于应用自带的 `node_modules`。如果消息上的钩子按钮不显示轮次，缺的就是这个包。
 
 ## 它到底做了什么
 
@@ -135,9 +137,9 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 
 ## 验证状态
 
-- `node test/run-tests.mjs` → **93 passed, 0 failed, 0 skipped**。
-- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **17 passed, 0 failed**。
-- `agent/pre-step` 在真实 dsh 会话里跑通：每提交一次提示，示例钩子打印一行 `echo-hook received event=…`。
+- `node test/run-tests.mjs` → **94 passed, 0 failed, 0 skipped**。
+- `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **18 passed, 0 failed**。
+- `agent/pre-step` 在真实 dsh 会话里跑通（前提是钩子已被信任）：示例钩子每跑一步打印一行 `echo-hook received event=…`（它在 agent 循环的每一步之前触发，所以一次提示可能打印多行）。未信任的钩子不会执行，必须先在审查弹窗或「设置 → 钩子」里批准。
 
 ## 这里做不到的事
 
