@@ -22,7 +22,7 @@ English: [README.md](README.md)
 
 ![设置页里的钩子列表、信任状态与操作](docs/screenshots/settings-hooks.png)
 
-单次运行的明细在消息操作行后面。**钩子统计**弹窗只读一轮、标明是哪一轮，列出这一轮的执行，底部是本会话累计——没有轮次下拉，它只回答你点开它的那条消息：
+单次运行的明细在消息操作行后面。**钩子统计**弹窗只读一轮、标明是哪一轮，列出这一轮的执行，底部是本会话累计——没有轮次下拉，它只回答你点开它的那条消息。没跑过钩子的那一轮如实显示 `0`；日志里压根没有的那一轮（宿主重启过）会明说，而不是拿别的轮的数字顶上：
 
 ![钩子统计弹窗：运行、拦截、失败与这一轮的执行历史](docs/screenshots/hook-stats.png)
 
@@ -137,7 +137,7 @@ dsh plugin --profile desktop add /path/to/dsh-codex-hooks
 
 ## 验证状态
 
-- `node test/run-tests.mjs` → **94 passed, 0 failed, 0 skipped**。
+- `node test/run-tests.mjs` → **96 passed, 0 failed, 0 skipped**。
 - `node selftest/host-e2e.mjs` → 对着真实 profile 跑 **18 passed, 0 failed**。
 - `agent/pre-step` 在真实 dsh 会话里跑通（前提是钩子已被信任）：示例钩子每跑一步打印一行 `echo-hook received event=…`（它在 agent 循环的每一步之前触发，所以一次提示可能打印多行）。未信任的钩子不会执行，必须先在审查弹窗或「设置 → 钩子」里批准。
 

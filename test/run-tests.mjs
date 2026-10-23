@@ -936,6 +936,34 @@ section('G. 运行记录与 /hooks 文本（lib/runs.js）')
     return 'marked turn'
   })
 
+  test('runs/没跑钩子的那一轮：显示它自己的 0，不借用别的轮的数字', () => {
+    const log = runs.createRunLog({ limit: 50 })
+    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], { sessionId: 's1', turnKey: 's1#1' })
+    // 轮 2 一个钩子都没跑（都被拒绝信任），但它是真实存在的一轮。
+    log.markTurn('s1', 's1#2')
+
+    const stats = log.stats({ turn: '2' })
+    assertEqual(stats.turn, 's1#2', 'the requested turn is answered')
+    assertEqual(stats.runs, 0, 'and it has no runs of its own')
+    assertEqual(stats.fallback, false, 'not a fallback')
+    assertEqual(stats.session.runs, 1, 'session totals still count the earlier run')
+    const listed = stats.turns.find((entry) => entry.turn === 's1#2')
+    assertEqual(listed?.runs ?? null, 0, 'the empty turn is listed')
+    return 'turn 2 with zero runs'
+  })
+
+  test('runs/日志里没有的那一轮：明说是回落，不假装', () => {
+    const log = runs.createRunLog({ limit: 50 })
+    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], { sessionId: 's1', turnKey: 's1#1' })
+
+    const stats = log.stats({ turn: '99' })
+    assertEqual(stats.requested, '99', 'the request is echoed back')
+    assertEqual(stats.fallback, true, 'flagged as a fallback')
+    assertEqual(stats.turn, 's1#1', 'falls back to the newest turn')
+    assertEqual(stats.runs, 1, 'the fallback turn still shows its own numbers')
+    return 'fallback'
+  })
+
   test('runs/标题优先 statusMessage，其次命令名，最后 key', () => {
     assertEqual(
       runs.hookTitle({ statusMessage: 'lint gate', handler: { command: 'C:/bin/echo-hook.mjs' } }),

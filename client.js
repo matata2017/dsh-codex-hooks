@@ -58,6 +58,7 @@ window.__ModuleLoader__.load({
       failed: 'Failed',
       noRuns: 'No hook has run in this session yet.',
       noRunsTurn: 'No hook has run in this turn yet.',
+      fallbackNote: 'This turn is not in the log (the host may have restarted); showing the newest turn instead.',
       turnLabel: 'Turn {value}',
       statusRunning: 'Running',
       sessionTotal: 'This session: {runs} run(s) · {blocked} blocked · {failed} failed',
@@ -152,6 +153,7 @@ window.__ModuleLoader__.load({
       statusRunning: '运行中',
       turnLabel: '第 {value} 轮',
       noRunsTurn: '这一轮还没有钩子运行过。',
+      fallbackNote: '这一轮不在日志里（宿主可能重启过），这里显示的是最近一轮。',
       sessionTotal: '本会话累计：{runs} 次运行 · {blocked} 次拦截 · {failed} 次失败',
       reviewTitle: '审查钩子',
       reviewCount: '{count} 个钩子是新的或已被修改。',
@@ -1271,6 +1273,9 @@ window.__ModuleLoader__.load({
                 { className: '__dh_modalSub' },
                 t('turnLabel', { value: stats.label }),
               )
+            : null,
+          stats?.fallback
+            ? h('div', { className: '__dh_dlgNote' }, t('fallbackNote'))
             : null,
           h(
             'div',
