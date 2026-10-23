@@ -65,7 +65,7 @@ window.__ModuleLoader__.load({
       noRuns: 'No hooks have run in this session.',
       noRunsTurn: 'No hooks have run in this turn.',
       noRunsMissing: 'No runs recorded for this turn.',
-      fallbackNote: 'No record for this turn. Showing the latest turn.',
+      fallbackNote: 'No record for this turn — it may predate this host session.',
       turnLabel: 'Turn {value}',
       statusRunning: 'Running',
       oneRun: '1 run',
@@ -105,8 +105,8 @@ window.__ModuleLoader__.load({
       runHook: 'Hook',
       runTiming: 'Took',
       runReason: 'Reason',
-      skippedHintOne: '1 hook needs review before it can run.',
-      skippedHint: '{count} hooks need review before they can run.',
+      skippedHintOne: '1 hook is untrusted, so nothing ran.',
+      skippedHint: '{count} hooks are untrusted, so nothing ran.',
     }
 
     const zh = {
@@ -156,9 +156,9 @@ window.__ModuleLoader__.load({
       statusSkipped: '已跳过',
       statusRunning: '运行中',
       turnLabel: '第 {value} 轮',
-      noRunsTurn: '本轮尚无钩子运行记录。',
-      noRunsMissing: '本轮没有运行记录。',
-      fallbackNote: '本轮没有记录，显示最近一轮。',
+      noRunsTurn: '这一轮还没有钩子运行过。',
+      noRunsMissing: '这一轮还没有钩子运行过。',
+      fallbackNote: '本轮没有记录，可能早于本次宿主启动。',
       oneRun: '1 次运行',
       manyRuns: '{count} 次运行',
       sessionTotal: '本会话累计：{runs} · {blocked} 次拦截 · {failed} 次失败',
@@ -188,8 +188,8 @@ window.__ModuleLoader__.load({
       runHook: '钩子',
       runTiming: '耗时',
       runReason: '原因',
-      skippedHintOne: '1 个钩子需要审核才能运行。',
-      skippedHint: '{count} 个钩子需要审核才能运行。',
+      skippedHintOne: '还有 1 个钩子未信任，因此没有运行。',
+      skippedHint: '还有 {count} 个钩子未信任，因此没有运行。',
     }
 
     const STYLE = [
@@ -308,6 +308,29 @@ window.__ModuleLoader__.load({
       return response.value
     }
 
+    /**
+     * Trust or revoke a hook, with a cooldown per hook.
+     *
+     * The trust button and the revoke button share one slot in a row, so React
+     * reuses the same DOM node when the state flips. The click that grants
+     * trust then ends with its mouseup on the button that just appeared, and
+     * the approval is revoked again a moment later — the trust vanishes the
+     * second it was given. The cooldown swallows that second click, and the
+     * `key` on the buttons makes React replace the node instead of retyping it.
+     */
+    const TRUST_COOLDOWN_MS = 700
+    const trustChangedAt = new Map()
+
+    function trustAction(hook, trusted) {
+      const key = hook?.key
+      if (!key) return Promise.reject(new Error('hook without a key'))
+      const now = Date.now()
+      const last = trustChangedAt.get(key) ?? 0
+      if (now - last < TRUST_COOLDOWN_MS) return Promise.resolve({ ok: true, skipped: true })
+      trustChangedAt.set(key, now)
+      return call('setTrusted', { key, trusted, expected: hook.trust ?? 'Untrusted' })
+    }
+
     function useConnection() {
       const [, bump] = React.useState(0)
       React.useEffect(() => {
@@ -412,7 +435,16 @@ window.__ModuleLoader__.load({
         setNotice(null)
         try {
           const result = await action()
-          if (result && result.ok === false) throw new Error(result.error ?? 'hooks call failed')
+          if (result && result.ok === false) {
+            // A click whose expectation is stale is not a failure: the button
+            // changed under the pointer and the state it wanted is already
+            // the state the host has.
+            if (result.skipped) {
+              await refresh()
+              return result
+            }
+            throw new Error(result.error ?? 'hooks call failed')
+          }
           bumpRevision()
           await refresh()
           return result
@@ -537,7 +569,7 @@ window.__ModuleLoader__.load({
                                   disabled: busy === hook.key,
                                   onChange: (event) => {
                                     const enabled = event.target.checked
-                                    run(hook.key, () => call('setEnabled', { key: hook.key, enabled }))
+                                    run(hook.key, () => call('setEnabled', { key: hook.key, enabled, expected: hook.enabled }))
                                   },
                                 }),
                                 h('span', null, hook.enabled === true ? t('enable') : t('disable')),
@@ -546,10 +578,11 @@ window.__ModuleLoader__.load({
                                 ? h(
                                     'button',
                                     {
+                                      key: `trust-${hook.trust}`,
                                       className: '__dh_btn',
                                       disabled: busy === hook.key,
                                       onClick: () => {
-                                        run(hook.key, () => call('setTrusted', { key: hook.key, trusted: false }))
+                                        run(hook.key, () => trustAction(hook, false))
                                       },
                                     },
                                     t('revoke'),
@@ -557,10 +590,11 @@ window.__ModuleLoader__.load({
                                 : h(
                                     'button',
                                     {
+                                      key: `trust-${hook.trust}`,
                                       className: '__dh_btn __dh_btnPrimary',
                                       disabled: busy === hook.key,
                                       onClick: () => {
-                                        run(hook.key, () => call('setTrusted', { key: hook.key, trusted: true }))
+                                        run(hook.key, () => trustAction(hook, true))
                                       },
                                     },
                                     t('trust'),
@@ -595,18 +629,18 @@ window.__ModuleLoader__.load({
     // Codex shows a review dialog when a hook needs a fingerprint, the hooks
     // browser behind "/hooks", and the run counters behind the message action
     // row. One overlay state drives all three.
-    const ui = { view: null, eventName: null, stats: false, statsTurn: null, statsDelta: null }
+    const ui = { view: null, eventName: null, stats: false, statsTurn: null }
     const uiListeners = new Set()
     let triggerEl = null
     /**
-     * The newest turn the conversation has drawn.
+     * The newest turn whose tail the conversation has drawn.
      *
-     * The host numbers turns from the agent counter, which starts over when the
-     * host restarts, while the conversation keeps numbering. The distance from
-     * this turn to a clicked one survives that drift, so it is what lets the host
-     * find the turn by position when it cannot find it by number.
+     * The host numbers turns from the agent counter and the conversation numbers
+     * them the same way, so a turn is found by its number. What the client has
+     * to add is the turn a message belongs to: the action row only gets a
+     * `messageId`, and the turn a message is in is the turn that is running now.
      */
-    let latestTurn = null
+    let lastDrawnTurn = null
     /**
      * messageId -> turn number, learned from that turn's tail.
      *
@@ -651,8 +685,7 @@ window.__ModuleLoader__.load({
 
     function openStats(request) {
       const turn = request?.turn ?? null
-      const delta = request?.delta ?? null
-      setUi({ view: null, eventName: null, stats: true, statsTurn: turn, statsDelta: delta })
+      setUi({ view: null, eventName: null, stats: true, statsTurn: turn })
     }
 
     /** Remember which turn a message's actions belong to (see messageTurns). */
@@ -664,6 +697,26 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * The turn a message belongs to, when the message is not the one a turn ends
+     * with.
+     *
+     * A turn draws its tail after all of its messages, so every message drawn
+     * since the last tail belongs to the turn that is running now — one past the
+     * last drawn turn. That is the turn the user is looking at when they click
+     * their own message, and answering with the newest known turn instead
+     * would show a neighbour's runs.
+     */
+    function turnOfMessage(messageId) {
+      if (typeof messageId !== 'string' || messageId === '') return null
+      const known = messageTurns.get(messageId)
+      if (typeof known === 'number') return known
+      if (lastDrawnTurn === null) return null
+      const running = lastDrawnTurn + 1
+      rememberMessageTurn(messageId, running)
+      return running
+    }
+
+    /**
      * Companion renderer for a turn tail: draws nothing, only records the turn of
      * the message this turn ends with.
      */
@@ -671,7 +724,7 @@ window.__ModuleLoader__.load({
       const turn = props?.turn
       const number = turn?.turn
       if (typeof number === 'number') {
-        if (latestTurn === null || number > latestTurn) latestTurn = number
+        if (lastDrawnTurn === null || number > lastDrawnTurn) lastDrawnTurn = number
         const closing = turn?.data?.get?.('turn-tail')?.closing
         rememberMessageTurn(closing?.finalNode?.messageId, number)
       }
@@ -816,12 +869,11 @@ window.__ModuleLoader__.load({
               return
             }
             // Open on the turn of the message whose row this is; the label the
-            // log uses for a turn is its number, and the distance to the newest
-            // turn is what still finds it after the host restarted.
-            const turn = typeof messageId === 'string' ? messageTurns.get(messageId) : undefined
-            const delta =
-              typeof turn === 'number' && latestTurn !== null ? Math.max(0, latestTurn - turn) : null
-            openStats({ turn: turn === undefined ? null : String(turn), delta })
+            // log uses for a turn is its number. The host matches that turn
+            // exactly, the way Codex matches a run's turn id: a turn the log
+            // never saw answers zero, never a neighbour's numbers.
+            const turn = turnOfMessage(messageId)
+            openStats({ turn: turn === null ? null : String(turn) })
           },
         },
         hookIcon(),
@@ -879,7 +931,13 @@ window.__ModuleLoader__.load({
         if (keys.length === 0) return
         setBusy(true)
         try {
-          for (const key of keys) await call('setTrusted', { key, trusted: true })
+          for (const key of keys) {
+            const hook = pending.find((item) => item.key === key)
+            // The host refuses a click whose expectation is stale, and the
+            // cooldown refuses the click that lands on the button that just
+            // replaced the one that was pressed.
+            await trustAction(hook, true)
+          }
           setError(null)
           bumpRevision()
           closeOverlay()
@@ -1133,7 +1191,11 @@ window.__ModuleLoader__.load({
                               disabled: busy === hook.key,
                               onChange: (event) =>
                                 act(hook.key, () =>
-                                  call('setEnabled', { key: hook.key, enabled: event.target.checked }),
+                                  call('setEnabled', {
+                                    key: hook.key,
+                                    enabled: event.target.checked,
+                                    expected: hook.enabled,
+                                  }),
                                 ),
                             }),
                           ),
@@ -1142,10 +1204,11 @@ window.__ModuleLoader__.load({
                                 'button',
                                 {
                                   type: 'button',
+                                  key: `trust-${hook.trust}`,
                                   className: '__dh_btn',
                                   disabled: busy === hook.key,
                                   onClick: () =>
-                                    act(hook.key, () => call('setTrusted', { key: hook.key, trusted: false })),
+                                    act(hook.key, () => trustAction(hook, false)),
                                 },
                                 t('revoke'),
                               )
@@ -1153,10 +1216,11 @@ window.__ModuleLoader__.load({
                                 'button',
                                 {
                                   type: 'button',
+                                  key: `trust-${hook.trust}`,
                                   className: '__dh_btn __dh_btnPrimary',
                                   disabled: busy === hook.key,
                                   onClick: () =>
-                                    act(hook.key, () => call('setTrusted', { key: hook.key, trusted: true })),
+                                    act(hook.key, () => trustAction(hook, true)),
                                 },
                                 t('trust'),
                               ),
@@ -1217,18 +1281,17 @@ window.__ModuleLoader__.load({
       // turn the session is on. There is no picker — the dialog answers for
       // the message you opened it from.
       const requested = view.statsTurn ?? null
-      const requestedDelta = view.statsDelta ?? null
 
       const refresh = React.useCallback(async () => {
         if (!conn) return
         try {
-          const value = await call('stats', { turn: requested, delta: requestedDelta })
+          const value = await call('stats', { turn: requested })
           setStats(value)
           setError(null)
         } catch (failure) {
           setError(failure?.message ?? String(failure))
         }
-      }, [conn, requested, requestedDelta])
+      }, [conn, requested])
 
       React.useEffect(() => {
         refresh()

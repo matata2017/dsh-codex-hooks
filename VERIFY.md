@@ -84,7 +84,7 @@ cp D:/work/huanghao/dsh-hoos/examples/hooks.json \
   - 首次发现 → `Untrusted`，分组上出现 "N needs review" 徽标，**hook 不执行**。
   - 点信任/审核通过 → 该条变 `Trusted`，徽标消失或计数减一。
 - **通过**：状态从 Untrusted → Trusted 可切换，且徽标计数随信任操作变化。
-- **失败**：未信任的 hook 照样执行；或点信任后状态不变；或徽标计数与实际未信任条数对不上。
+- **失败**：未信任的 hook 照样执行；或点信任后状态不变；或徽标计数与实际未信任条数对不上；**或点完信任一两秒后又退回未信任**（说明这次点击落到了刚替换上来的「撤销」按钮上）。
 - **附带检查**：`$DSH_HOME/hooks.state.json` 里出现对应 key，且 `trustedHash` 形如 `sha256:<64 位 hex>`。key 格式必须是 `<路径>:<事件小写下划线>:<group>:<handler>`。
 - **证据**：徽标截图 + `hooks.state.json` 片段。
 

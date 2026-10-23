@@ -345,20 +345,19 @@ await checkAsync('a run from a turn-less seam lands in the session current turn'
   assert.equal(previous.runs, 1, 'turn-c keeps only its own hook run')
 })
 
-/* The remote method has to accept `delta`, not just the log: the client sends
- * it because turn numbers restart when the host does. */
-await checkAsync('stats() accepts the delta the client sends', async () => {
+/* Codex binds every run to its turn id and matches exactly: a turn the log
+ * never saw — including one numbered before a host restart, when the client's
+ * counter started over while this buffer still holds pre-restart turns —
+ * answers zero rather than borrowing a neighbour's numbers. */
+await checkAsync('stats() answers an unknown turn with zero, never a neighbour', async () => {
   const controller = ctx.services.get('hooksController')
-  // What the client sends after the host restarted: a turn number the log has
-  // never seen (the counter restarted at 1) plus how far back it is.
-  const withDelta = controller.stats('gone', 1)
-  assert.equal(withDelta.resolved, 'offset', 'resolved by distance')
-  assert.equal(withDelta.turn, 'turn-c', 'one turn back from turn-d')
-  assert.equal(withDelta.runs, 1, 'the older turn keeps its run')
+  const unknown = controller.stats('gone')
+  assert.equal(unknown.resolved, 'missing', 'a turn the log never saw is missing')
+  assert.equal(unknown.runs, 0, 'and it reports no runs rather than borrowing some')
 
-  const tooFar = controller.stats('gone', 99)
-  assert.equal(tooFar.resolved, 'missing', 'nothing that far back is invented')
-  assert.equal(tooFar.runs, 0, 'and it reports no runs rather than borrowing some')
+  const withDelta = controller.stats('gone', 1)
+  assert.equal(withDelta.resolved, 'missing', 'a stray delta never resolves by distance')
+  assert.equal(withDelta.runs, 0, 'and it still reports no runs')
 })
 
 console.log('\nstate file hygiene')

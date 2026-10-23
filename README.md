@@ -22,7 +22,7 @@ Everything else is managed in **Settings → Hooks**: hooks grouped by where the
 
 ![Settings page listing hooks with trust state and controls](docs/screenshots/settings-hooks.png)
 
-Per-run detail lives behind the message action row. The **Hook stats** dialog reads one turn, names it, and lists that turn's runs with the session totals underneath — no turn picker, it answers for the message you opened it from. Turns are numbered from the agent's counter, which starts over when the host restarts, so a turn that cannot be found by number is matched by how far back from the newest turn it sits; a turn further back than the log goes answers with `0` rather than borrowing another turn's numbers:
+Per-run detail lives behind the message action row. The **Hook stats** dialog reads one turn, names it, and lists that turn's runs with the session totals underneath — no turn picker, it answers for the message you opened it from. Every run belongs to the turn that triggered it, the way Codex binds a run to its turn id: the match is exact, and a turn the log never saw — including one numbered before a host restart — answers with `0` and a note, never with another turn's numbers. A read always resolves inside the session the user is working in — another session's same-numbered turn never stands in. The turn comes from the message: a message that ends a turn names it exactly, and a message of the turn that is running now answers for that turn:
 
 ![Hook stats dialog: runs, blocked, failed and the run history of one turn](docs/screenshots/hook-stats.png)
 
@@ -137,7 +137,7 @@ Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `age
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **98 passed, 0 failed, 0 skipped**.
+- `node test/run-tests.mjs` → **99 passed, 0 failed, 0 skipped**.
 - `node selftest/host-e2e.mjs` → **20 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session once the hook is trusted: the example hook prints one `echo-hook received event=…` line per agent step (it fires before every step, so one prompt can produce several lines). A hook stays untrusted until you approve it in the review dialog or in Settings → Hooks; an untrusted hook never runs.
 
@@ -153,6 +153,8 @@ These are dsh boundaries, not missing code: they need a seam the harness does no
 ## Security
 
 Hooks execute real commands with the permissions of the dsh process. That is why trust is pinned to the sha256 fingerprint of each hook: approving a hook approves exactly that command line, and any edit requires a new approval. Only enable hooks you have read.
+
+Approval sticks. The trust state is written to a temporary file and renamed over the real one, so an interrupted write can never leave a half-file that the next read would reject — and a click that would land on the button that just replaced it is ignored, so granting trust cannot revoke it again a moment later.
 
 ## License
 

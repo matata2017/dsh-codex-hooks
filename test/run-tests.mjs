@@ -956,27 +956,21 @@ section('G. 运行记录与 /hooks 文本（lib/runs.js）')
     return 'turn 2 with zero runs'
   })
 
-  test('runs/宿主重启后轮次编号对不上：按距离对齐到正确的那一轮', () => {
+  test('runs/轮次编号对不上：宁可空着，也不按距离借别人的数字', () => {
     const log = runs.createRunLog({ limit: 50 })
-    // The host restarted, so its own counter starts over at 1 and 2 while the
-    // conversation keeps numbering: the dialog asks about turn 74, the host only
-    // knows turns 1 and 2.
+    // The host and the conversation number turns the same way, so a turn is
+    // found by its number. If the log never saw it — older than this process,
+    // or its hooks have not run yet — the answer is that turn with nothing in
+    // it, never the turn next to it.
     log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], { sessionId: 's1', turnKey: 's1#1' })
     log.record('agent/pre-step', [{ key: 'b', status: 'ok' }], { sessionId: 's1', turnKey: 's1#2' })
 
-    const newest = log.stats({ turn: '74', delta: 0 })
-    assertEqual(newest.resolved, 'offset', 'resolved by distance')
-    assertEqual(newest.turn, 's1#2', 'distance 0 is the newest turn')
-    assertEqual(newest.runs, 1, 'and it shows that turn only')
-
-    const previous = log.stats({ turn: '73', delta: 1 })
-    assertEqual(previous.turn, 's1#1', 'distance 1 is the turn before it')
-    assertEqual(previous.runs, 1, 'with its own runs')
-
-    const beyond = log.stats({ turn: '40', delta: 9 })
-    assertEqual(beyond.resolved, 'missing', 'a turn further back than the log goes is missing')
-    assertEqual(beyond.runs, 0, 'and stays empty')
-    return 'offset'
+    const unknown = log.stats({ turn: '74' })
+    assertEqual(unknown.resolved, 'missing', 'a turn the log never saw is missing')
+    assertEqual(unknown.turn, '74', 'answered for the turn that was asked about')
+    assertEqual(unknown.runs, 0, 'and it stays empty')
+    assertEqual(unknown.label, '74', 'the label is that turn')
+    return 'missing'
   })
 
   test('runs/日志里没有的那一轮：空着，不拿别人的数字顶替', () => {

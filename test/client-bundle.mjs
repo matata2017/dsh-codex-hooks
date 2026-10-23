@@ -369,6 +369,35 @@ export async function runClientBundleCheck() {
     return 'trust'
   })
 
+  await check('client/同一次点击不会把刚给的信任又撤掉', async () => {
+    const reg = registrations.find((entry) => entry.spec.name === 'settings.section')
+    if (!reg) throw new Error('settings section not registered')
+    renderTree({ type: reg.component, props: {} })
+    await settle()
+    let tree = renderTree({ type: reg.component, props: {} })
+    if (!findRow(tree, '__dh_btnPrimary')) {
+      const head = findRow(tree, '__dh_groupHead')
+      if (!head) throw new Error(`no group rendered: ${text(tree).join(' ')}`)
+      head.props.onClick()
+      tree = renderTree({ type: reg.component, props: {} })
+    }
+    const button = findRow(tree, '__dh_btnPrimary')
+    if (!button) throw new Error(`trust button not found: ${text(tree).join(' ')}`)
+    // The trust button and the revoke button share one slot, so React reuses
+    // the same node when the state flips. The key makes it replace the node
+    // instead, so the mouseup of the click that granted trust cannot land on
+    // the button that just appeared and revoke it again.
+    if (!String(button.props.key ?? '').startsWith('trust-')) {
+      throw new Error(`the trust button must carry a key: ${button.props.key}`)
+    }
+    const before = calls.filter((entry) => entry === 'hooks/setTrusted').length
+    await button.props.onClick()
+    await button.props.onClick()
+    const after = calls.filter((entry) => entry === 'hooks/setTrusted').length
+    if (after - before > 1) throw new Error(`two clicks sent ${after - before} trust calls`)
+    return 'one trust'
+  })
+
   await check('client/为 /hooks 注册客户端动作', () => {
     if (decorations.length !== 1) throw new Error(`expected 1 decoration, got ${decorations.length}`)
     if (decorations[0].name !== 'hooks') throw new Error('decoration name')
