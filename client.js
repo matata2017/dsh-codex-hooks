@@ -2,6 +2,12 @@
 // browser loader checks that the bundle registered exactly that id. The row id
 // is the package name, so register under ours; the manifest is the fallback
 // for a host that composed the row under another name.
+//
+// The browser loader concatenates every installed plugin's client bundle into
+// one script, so a top-level name belongs to all of them: two plugins calling
+// theirs `SELF_ID` is a syntax error that takes the whole app down. Keep this
+// file's names to itself.
+;(function () {
 const SELF_ID = (() => {
   const entries = (typeof window !== 'undefined' && window.__DSH_BOOT__?.entries) || []
   const ids = entries.map((entry) => entry?.id).filter((id) => typeof id === 'string')
@@ -1521,3 +1527,5 @@ window.__ModuleLoader__.load({
     return { inject: ['slots', 'locale', 'connection'], apply }
   },
 })
+
+})()
