@@ -157,3 +157,7 @@ Hooks execute real commands with the permissions of the dsh process. That is why
 ## License
 
 MIT
+
+### Client bundles share one global scope
+
+The browser loader concatenates every installed plugin client bundle into a single script, so a top-level `const` is visible to all plugins. Two plugins that pick the same name is a `SyntaxError` that stops the whole app from booting, not just one plugin. This client bundle therefore runs inside its own function and declares nothing globally.
