@@ -22,7 +22,7 @@ Everything else is managed in **Settings → Hooks**: hooks grouped by where the
 
 ![Settings page listing hooks with trust state and controls](docs/screenshots/settings-hooks.png)
 
-Per-run detail lives behind the message action row. The **Hook stats** dialog reads one turn, names it, and lists that turn's runs with the session totals underneath — no turn picker, it answers for the message you opened it from. A turn that ran no hook answers with `0` for that turn, and a turn the log never heard of (the host restarted) says so instead of borrowing another turn's numbers:
+Per-run detail lives behind the message action row. The **Hook stats** dialog reads one turn, names it, and lists that turn's runs with the session totals underneath — no turn picker, it answers for the message you opened it from. Turns are numbered from the agent's counter, which starts over when the host restarts, so a turn that cannot be found by number is matched by how far back from the newest turn it sits; a turn further back than the log goes answers with `0` rather than borrowing another turn's numbers:
 
 ![Hook stats dialog: runs, blocked, failed and the run history of one turn](docs/screenshots/hook-stats.png)
 
@@ -137,7 +137,7 @@ Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `age
 
 ## Verification status
 
-- `node test/run-tests.mjs` → **96 passed, 0 failed, 0 skipped**.
+- `node test/run-tests.mjs` → **97 passed, 0 failed, 0 skipped**.
 - `node selftest/host-e2e.mjs` → **18 passed, 0 failed** against a real profile.
 - `agent/pre-step` runs in a live dsh session once the hook is trusted: the example hook prints one `echo-hook received event=…` line per agent step (it fires before every step, so one prompt can produce several lines). A hook stays untrusted until you approve it in the review dialog or in Settings → Hooks; an untrusted hook never runs.
 

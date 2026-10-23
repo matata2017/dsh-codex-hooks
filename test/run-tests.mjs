@@ -856,12 +856,16 @@ section('G. 运行记录与 /hooks 文本（lib/runs.js）')
     assertEqual(older.runs, 1, 'older turn runs')
     assertEqual(older.history[0].key, 'a', 'older turn row')
 
-    // A turn that already aged out of the 200 row buffer must not wedge the
-    // dialog on "nothing ran this turn": fall back to the current one.
+    // A turn this log never saw must read as itself and empty: answering with
+    // another turn's numbers is exactly the bug the user hit (a turn whose hooks
+    // were untrusted showed the previous turn's nine runs).
     const unknown = log.stats({ turn: 's1#99' })
     assertEqual(unknown.requested, 's1#99', 'request echoed back')
-    assertEqual(unknown.turn, 's1#2', 'unknown turn falls back to the current one')
-    assertEqual(unknown.runs, 2, 'fallback scopes to the current turn')
+    assertEqual(unknown.resolved, 'missing', 'reported as missing')
+    assertEqual(unknown.turn, 's1#99', 'answered for the turn that was asked about')
+    assertEqual(unknown.runs, 0, 'and it carries no borrowed runs')
+    assertEqual(unknown.history.length, 0, 'no borrowed rows')
+    assertEqual(unknown.session.runs, 3, 'session totals still available')
 
     // The message action row only knows the turn's number, not its key, so a
     // bare label must resolve to that turn instead of falling back.
@@ -945,23 +949,47 @@ section('G. 运行记录与 /hooks 文本（lib/runs.js）')
     const stats = log.stats({ turn: '2' })
     assertEqual(stats.turn, 's1#2', 'the requested turn is answered')
     assertEqual(stats.runs, 0, 'and it has no runs of its own')
-    assertEqual(stats.fallback, false, 'not a fallback')
+    assertEqual(stats.resolved, 'exact', 'found by number, not by distance')
     assertEqual(stats.session.runs, 1, 'session totals still count the earlier run')
     const listed = stats.turns.find((entry) => entry.turn === 's1#2')
     assertEqual(listed?.runs ?? null, 0, 'the empty turn is listed')
     return 'turn 2 with zero runs'
   })
 
-  test('runs/日志里没有的那一轮：明说是回落，不假装', () => {
+  test('runs/宿主重启后轮次编号对不上：按距离对齐到正确的那一轮', () => {
+    const log = runs.createRunLog({ limit: 50 })
+    // The host restarted, so its own counter starts over at 1 and 2 while the
+    // conversation keeps numbering: the dialog asks about turn 74, the host only
+    // knows turns 1 and 2.
+    log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], { sessionId: 's1', turnKey: 's1#1' })
+    log.record('agent/pre-step', [{ key: 'b', status: 'ok' }], { sessionId: 's1', turnKey: 's1#2' })
+
+    const newest = log.stats({ turn: '74', delta: 0 })
+    assertEqual(newest.resolved, 'offset', 'resolved by distance')
+    assertEqual(newest.turn, 's1#2', 'distance 0 is the newest turn')
+    assertEqual(newest.runs, 1, 'and it shows that turn only')
+
+    const previous = log.stats({ turn: '73', delta: 1 })
+    assertEqual(previous.turn, 's1#1', 'distance 1 is the turn before it')
+    assertEqual(previous.runs, 1, 'with its own runs')
+
+    const beyond = log.stats({ turn: '40', delta: 9 })
+    assertEqual(beyond.resolved, 'missing', 'a turn further back than the log goes is missing')
+    assertEqual(beyond.runs, 0, 'and stays empty')
+    return 'offset'
+  })
+
+  test('runs/日志里没有的那一轮：空着，不拿别人的数字顶替', () => {
     const log = runs.createRunLog({ limit: 50 })
     log.record('agent/pre-step', [{ key: 'a', status: 'ok' }], { sessionId: 's1', turnKey: 's1#1' })
 
     const stats = log.stats({ turn: '99' })
     assertEqual(stats.requested, '99', 'the request is echoed back')
-    assertEqual(stats.fallback, true, 'flagged as a fallback')
-    assertEqual(stats.turn, 's1#1', 'falls back to the newest turn')
-    assertEqual(stats.runs, 1, 'the fallback turn still shows its own numbers')
-    return 'fallback'
+    assertEqual(stats.resolved, 'missing', 'reported as missing')
+    assertEqual(stats.turn, '99', 'answered for the turn that was asked about')
+    assertEqual(stats.runs, 0, 'nothing borrowed from the newest turn')
+    assertEqual(stats.label, '99', 'the label is the turn that was asked about')
+    return 'missing'
   })
 
   test('runs/标题优先 statusMessage，其次命令名，最后 key', () => {

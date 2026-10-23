@@ -58,7 +58,8 @@ window.__ModuleLoader__.load({
       failed: 'Failed',
       noRuns: 'No hook has run in this session yet.',
       noRunsTurn: 'No hook has run in this turn yet.',
-      fallbackNote: 'This turn is not in the log (the host may have restarted); showing the newest turn instead.',
+      noRunsMissing: 'The log has nothing for this turn.',
+      fallbackNote: 'This turn is not in the log — the log lives in memory, so a host restart clears it.',
       turnLabel: 'Turn {value}',
       statusRunning: 'Running',
       sessionTotal: 'This session: {runs} run(s) · {blocked} blocked · {failed} failed',
@@ -153,7 +154,8 @@ window.__ModuleLoader__.load({
       statusRunning: '运行中',
       turnLabel: '第 {value} 轮',
       noRunsTurn: '这一轮还没有钩子运行过。',
-      fallbackNote: '这一轮不在日志里（宿主可能重启过），这里显示的是最近一轮。',
+      noRunsMissing: '日志里没有这一轮的记录。',
+      fallbackNote: '这一轮不在日志里——日志只在内存，宿主重启就会清空。',
       sessionTotal: '本会话累计：{runs} 次运行 · {blocked} 次拦截 · {failed} 次失败',
       reviewTitle: '审查钩子',
       reviewCount: '{count} 个钩子是新的或已被修改。',
@@ -589,9 +591,18 @@ window.__ModuleLoader__.load({
     // Codex shows a review dialog when a hook needs a fingerprint, the hooks
     // browser behind "/hooks", and the run counters behind the message action
     // row. One overlay state drives all three.
-    const ui = { view: null, eventName: null, stats: false, statsTurn: null }
+    const ui = { view: null, eventName: null, stats: false, statsTurn: null, statsDelta: null }
     const uiListeners = new Set()
     let triggerEl = null
+    /**
+     * The newest turn the conversation has drawn.
+     *
+     * The host numbers turns from the agent counter, which starts over when the
+     * host restarts, while the conversation keeps numbering. The distance from
+     * this turn to a clicked one survives that drift, so it is what lets the host
+     * find the turn by position when it cannot find it by number.
+     */
+    let latestTurn = null
     /**
      * messageId -> turn number, learned from that turn's tail.
      *
@@ -634,8 +645,10 @@ window.__ModuleLoader__.load({
       setUi({ view: 'browser', eventName: eventName ?? null, stats: false })
     }
 
-    function openStats(turn) {
-      setUi({ view: null, eventName: null, stats: true, statsTurn: turn ?? null })
+    function openStats(request) {
+      const turn = request?.turn ?? null
+      const delta = request?.delta ?? null
+      setUi({ view: null, eventName: null, stats: true, statsTurn: turn, statsDelta: delta })
     }
 
     /** Remember which turn a message's actions belong to (see messageTurns). */
@@ -654,6 +667,7 @@ window.__ModuleLoader__.load({
       const turn = props?.turn
       const number = turn?.turn
       if (typeof number === 'number') {
+        if (latestTurn === null || number > latestTurn) latestTurn = number
         const closing = turn?.data?.get?.('turn-tail')?.closing
         rememberMessageTurn(closing?.finalNode?.messageId, number)
       }
@@ -798,9 +812,12 @@ window.__ModuleLoader__.load({
               return
             }
             // Open on the turn of the message whose row this is; the label the
-            // log uses for a turn is its number.
+            // log uses for a turn is its number, and the distance to the newest
+            // turn is what still finds it after the host restarted.
             const turn = typeof messageId === 'string' ? messageTurns.get(messageId) : undefined
-            openStats(turn === undefined ? null : String(turn))
+            const delta =
+              typeof turn === 'number' && latestTurn !== null ? Math.max(0, latestTurn - turn) : null
+            openStats({ turn: turn === undefined ? null : String(turn), delta })
           },
         },
         hookIcon(),
@@ -1196,17 +1213,18 @@ window.__ModuleLoader__.load({
       // turn the session is on. There is no picker — the dialog answers for
       // the message you opened it from.
       const requested = view.statsTurn ?? null
+      const requestedDelta = view.statsDelta ?? null
 
       const refresh = React.useCallback(async () => {
         if (!conn) return
         try {
-          const value = await call('stats', { turn: requested })
+          const value = await call('stats', { turn: requested, delta: requestedDelta })
           setStats(value)
           setError(null)
         } catch (failure) {
           setError(failure?.message ?? String(failure))
         }
-      }, [conn, requested])
+      }, [conn, requested, requestedDelta])
 
       React.useEffect(() => {
         refresh()
@@ -1267,14 +1285,16 @@ window.__ModuleLoader__.load({
               '\u00d7',
             ),
           ),
-          stats?.turn
+          // The dialog speaks the conversation's turn numbers, so a turn the
+          // host had to find by distance is still named the way the user counts.
+          stats?.turn || requested !== null
             ? h(
                 'div',
                 { className: '__dh_modalSub' },
-                t('turnLabel', { value: stats.label }),
+                t('turnLabel', { value: requested !== null ? requested : stats?.label }),
               )
             : null,
-          stats?.fallback
+          stats?.resolved === 'missing'
             ? h('div', { className: '__dh_dlgNote' }, t('fallbackNote'))
             : null,
           h(
@@ -1313,7 +1333,17 @@ window.__ModuleLoader__.load({
               )
             : null,
           history.length === 0
-            ? h('div', { className: '__dh_empty' }, stats === null ? t('loading') : turns.length === 0 ? t('noRuns') : t('noRunsTurn'))
+            ? h(
+                'div',
+                { className: '__dh_empty' },
+                stats === null
+                  ? t('loading')
+                  : stats?.resolved === 'missing'
+                    ? t('noRunsMissing')
+                    : turns.length === 0
+                      ? t('noRuns')
+                      : t('noRunsTurn'),
+              )
             : h(
                 'div',
                 { className: '__dh_history' },
