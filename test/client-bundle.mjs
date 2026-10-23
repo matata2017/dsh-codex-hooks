@@ -544,6 +544,35 @@ export async function runClientBundleCheck() {
     return 'expanded'
   })
 
+  await check('client/英文与中文词典的 key 一一对应', () => {
+    // A key that exists in one language only shows up as the raw key name in
+    // the other language, so the two dictionaries have to stay in step.
+    const source = readFileSync(join(ROOT, 'client.js'), 'utf8')
+    const read = (name) => {
+      const start = source.indexOf(`const ${name} = {`)
+      if (start < 0) throw new Error(`the ${name} dictionary is missing`)
+      const from = source.indexOf('{', start)
+      let depth = 0
+      for (let index = from; index < source.length; index += 1) {
+        if (source[index] === '{') depth += 1
+        else if (source[index] === '}') {
+          depth -= 1
+          if (depth === 0) {
+            return vm.runInNewContext(`(${source.slice(from, index + 1)})`)
+          }
+        }
+      }
+      throw new Error(`the ${name} dictionary is not closed`)
+    }
+    const en = read('en')
+    const zh = read('zh')
+    const missingInEn = Object.keys(zh).filter((key) => !(key in en))
+    const missingInZh = Object.keys(en).filter((key) => !(key in zh))
+    if (missingInEn.length > 0) throw new Error(`missing in English: ${missingInEn.join(', ')}`)
+    if (missingInZh.length > 0) throw new Error(`missing in Chinese: ${missingInZh.join(', ')}`)
+    return `${Object.keys(en).length} keys`
+  })
+
   await tick()
   await check('client/调用宿主远程方法', () => {
     for (const expected of ['hooks/list', 'hooks/stats', 'hooks/review']) {
