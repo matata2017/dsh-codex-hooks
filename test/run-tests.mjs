@@ -862,6 +862,13 @@ section('G. 运行记录与 /hooks 文本（lib/runs.js）')
     assertEqual(unknown.requested, 's1#99', 'request echoed back')
     assertEqual(unknown.turn, 's1#2', 'unknown turn falls back to the current one')
     assertEqual(unknown.runs, 2, 'fallback scopes to the current turn')
+
+    // The message action row only knows the turn's number, not its key, so a
+    // bare label must resolve to that turn instead of falling back.
+    const byLabel = log.stats({ turn: '1' })
+    assertEqual(byLabel.requested, '1', 'label echoed back as requested')
+    assertEqual(byLabel.turn, 's1#1', 'a bare label resolves to its turn key')
+    assertEqual(byLabel.runs, 1, 'label-scoped runs')
     return 'turn-scoped'
   })
 

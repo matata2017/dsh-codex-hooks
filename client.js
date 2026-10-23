@@ -585,9 +585,19 @@ window.__ModuleLoader__.load({
     // Codex shows a review dialog when a hook needs a fingerprint, the hooks
     // browser behind "/hooks", and the run counters behind the message action
     // row. One overlay state drives all three.
-    const ui = { view: null, eventName: null, stats: false }
+    const ui = { view: null, eventName: null, stats: false, statsTurn: null }
     const uiListeners = new Set()
     let triggerEl = null
+    /**
+     * messageId -> turn number, learned from that turn's tail.
+     *
+     * The action row is handed a `messageId` and nothing else, so on its own it
+     * cannot say which turn the message belongs to. Its turn's tail does carry
+     * the whole TurnLocation, and TurnTailNodeView draws `turnTail` before
+     * `assistant-actions`, so recording what the tail knows lets the action open
+     * the stats of the message the user actually clicked.
+     */
+    const messageTurns = new Map()
 
     function setUi(patch) {
       let changed = false
@@ -620,8 +630,30 @@ window.__ModuleLoader__.load({
       setUi({ view: 'browser', eventName: eventName ?? null, stats: false })
     }
 
-    function openStats() {
-      setUi({ view: null, eventName: null, stats: true })
+    function openStats(turn) {
+      setUi({ view: null, eventName: null, stats: true, statsTurn: turn ?? null })
+    }
+
+    /** Remember which turn a message's actions belong to (see messageTurns). */
+    function rememberMessageTurn(messageId, turnNumber) {
+      if (typeof messageId !== 'string' || messageId === '') return
+      if (typeof turnNumber !== 'number' || !Number.isFinite(turnNumber)) return
+      if (messageTurns.size > 512) messageTurns.clear()
+      messageTurns.set(messageId, turnNumber)
+    }
+
+    /**
+     * Companion renderer for a turn tail: draws nothing, only records the turn of
+     * the message this turn ends with.
+     */
+    function HooksTurnTail(props) {
+      const turn = props?.turn
+      const number = turn?.turn
+      if (typeof number === 'number') {
+        const closing = turn?.data?.get?.('turn-tail')?.closing
+        rememberMessageTurn(closing?.finalNode?.messageId, number)
+      }
+      return null
     }
 
     function closeOverlay() {
@@ -745,9 +777,10 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function HooksStatsAction() {
+    function HooksStatsAction(props) {
       const t = (key, values) => format(translate(key), values)
       const view = useUi()
+      const messageId = props?.messageId
       return h(
         'button',
         {
@@ -755,7 +788,16 @@ window.__ModuleLoader__.load({
           className: '__dh_actionBtn',
           title: t('hookStats'),
           'aria-label': t('hookStats'),
-          onClick: () => (view.stats ? closeOverlay() : openStats()),
+          onClick: () => {
+            if (view.stats) {
+              closeOverlay()
+              return
+            }
+            // Open on the turn of the message whose row this is; the label the
+            // log uses for a turn is its number.
+            const turn = typeof messageId === 'string' ? messageTurns.get(messageId) : undefined
+            openStats(turn === undefined ? null : String(turn))
+          },
         },
         hookIcon(),
       )
@@ -1140,26 +1182,36 @@ window.__ModuleLoader__.load({
     function HooksStatsDialog() {
       const t = (key, values) => format(translate(key), values)
       const conn = useConnection()
+      const view = useUi()
       const [stats, setStats] = React.useState(null)
-      const [turn, setTurn] = React.useState(null)
       const [error, setError] = React.useState(null)
       const [openRun, setOpenRun] = React.useState(null)
+      const [picked, setPicked] = React.useState(null)
       const dialogRef = React.useRef(null)
+      // The opener may ask for a turn (the message action passes the plain
+      // number it knows). The picker then follows whatever the host resolves
+      // that to, and `picked` is remembered together with the request it
+      // answered, so reopening on another message starts over.
+      const requested = view.statsTurn ?? null
+      const turn = picked && picked.request === requested ? picked.turn : requested
 
       const refresh = React.useCallback(async () => {
         if (!conn) return
         try {
           const value = await call('stats', { turn })
-          // The host reads the newest session, so a selected turn can stop
-          // existing (session switch) or age out of the 200 row buffer. Follow
-          // the host instead of pinning the picker to a turn it no longer has.
-          if (turn !== null && value?.turn !== turn) setTurn(null)
+          // A requested turn can age out of the 200 row buffer, and a label can
+          // resolve to that turn's key. Follow the host instead of pinning the
+          // picker to a value the host does not have. Without a request the
+          // picker stays on "current turn", which tracks the host by itself.
+          if (requested !== null && value?.turn !== turn) {
+            setPicked({ request: requested, turn: value?.turn ?? null })
+          }
           setStats(value)
           setError(null)
         } catch (failure) {
           setError(failure?.message ?? String(failure))
         }
-      }, [conn, turn])
+      }, [conn, turn, requested])
 
       React.useEffect(() => {
         refresh()
@@ -1231,7 +1283,11 @@ window.__ModuleLoader__.load({
                     className: '__dh_select',
                     value: turn ?? '',
                     'aria-label': t('turnFilter'),
-                    onChange: (event) => setTurn(event.target.value === '' ? null : event.target.value),
+                    onChange: (event) =>
+                      setPicked({
+                        request: requested,
+                        turn: event.target.value === '' ? null : event.target.value,
+                      }),
                   },
                   h('option', { value: '' }, t('currentTurn')),
                   turns.map((entry) =>
@@ -1383,6 +1439,24 @@ window.__ModuleLoader__.load({
           )
         } catch {
           /* the composer tool row is optional: Settings and /hooks still work */
+        }
+        try {
+          // Draws nothing; only records which turn each message belongs to, so
+          // the action row below can open that turn's stats (see messageTurns).
+          client.slots.inject('conversation.chat.turnTail', () =>
+            client.slots.register(
+              {
+                name: 'conversation.chat.turnTail',
+                id: 'dsh-codex-hooks/turn-index',
+                order: 1,
+                locale: NS,
+                inject: () => ({ t: translate }),
+              },
+              HooksTurnTail,
+            ),
+          )
+        } catch {
+          /* without it the stats dialog falls back to the current turn */
         }
         try {
           client.slots.inject('conversation.chat.assistant-actions', () =>

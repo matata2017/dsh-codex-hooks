@@ -278,8 +278,13 @@ export async function runClientBundleCheck() {
           // Mirror the host: a requested turn is honoured only while it is still
           // in the index; otherwise stats() falls back to the current turn.
           const requested = payload?.args?.turn ?? null
-          const known = FAKE_STATS.turns.some((entry) => entry.turn === requested)
-          return { ok: true, value: { ...FAKE_STATS, requested, turn: known ? requested : FAKE_STATS.turn } }
+          const known = FAKE_STATS.turns.find(
+            (entry) => entry.turn === requested || entry.label === String(requested),
+          )
+          return {
+            ok: true,
+            value: { ...FAKE_STATS, requested, turn: known ? known.turn : FAKE_STATS.turn },
+          }
         }
         if (method === 'hooks/review') return { ok: true, value: FAKE_REVIEW }
         return { ok: true, value: { ok: true } }
@@ -311,9 +316,10 @@ export async function runClientBundleCheck() {
 
   const trigger = registrations.find((entry) => entry.spec.name === 'conversation.input.left')
   const action = registrations.find((entry) => entry.spec.name === 'conversation.chat.assistant-actions')
+  const turnIndex = registrations.find((entry) => entry.spec.name === 'conversation.chat.turnTail')
   const overlay = registrations.find((entry) => entry.spec.name === 'shell.overlay')
   const renderTrigger = () => renderTree(renderComponent(trigger.component, {}))
-  const renderAction = () => renderTree(renderComponent(action.component, {}))
+  const renderAction = (props = {}) => renderTree(renderComponent(action.component, props))
   const renderOverlay = () => renderTree(renderComponent(overlay.component, {}))
   const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
   // Mount the panel, let its fetch land, then render again: one pass is not
@@ -328,6 +334,7 @@ export async function runClientBundleCheck() {
   await check('client/注册设置段、工具栏按钮、浮层与消息操作', () => {
     if (!trigger) throw new Error('composer tool row slot not registered')
     if (!action) throw new Error('assistant action slot not registered')
+    if (!turnIndex) throw new Error('turn tail slot not registered')
     if (!overlay) throw new Error('shell overlay slot not registered')
     if (!registrations.find((entry) => entry.spec.name === 'settings.section')) {
       throw new Error('settings section not registered')
@@ -335,7 +342,7 @@ export async function runClientBundleCheck() {
     if (registrations.find((entry) => entry.spec.name === 'conversation.input.overlay')) {
       throw new Error('the composer overlay slot must not be used any more')
     }
-    return '4 slots'
+    return '5 slots'
   })
 
   await check('client/设置页列出钩子，点信任调用 setTrusted 并刷新', async () => {
@@ -467,6 +474,32 @@ export async function runClientBundleCheck() {
     await settle()
   }
 
+  await check('client/点某条消息的图标，弹窗开在那条消息所在的轮', async () => {
+    if (!turnIndex) throw new Error('turn tail slot not registered')
+    // The tail of turn 2 says the turn ends with message m-2.
+    const tail = renderTree(
+      renderComponent(turnIndex.component, {
+        turn: {
+          turn: 2,
+          data: { get: () => ({ closing: { finalNode: { messageId: 'm-2' } } }) },
+        },
+      }),
+    )
+    if (tail !== null) throw new Error('the turn tail renderer must draw nothing')
+    await ensureClosed()
+    const button = findRow(renderAction({ messageId: 'm-2' }), '__dh_actionBtn')
+    if (!button) throw new Error('message action button not rendered')
+    button.props.onClick()
+    await settle()
+    await settle()
+    const select = findRow(renderOverlay(), '__dh_select')
+    if (!select) throw new Error('turn switcher select not rendered')
+    if (select.props.value !== 'sess#2') {
+      throw new Error(`dialog must open on the clicked message's turn, got "${select.props.value}"`)
+    }
+    return 'sess#2'
+  })
+
   await check('client/统计对话框按轮次展示并带轮次切换器', async () => {
     await openStatsDialog()
     const rendered = text(renderOverlay()).join(' ')
@@ -476,7 +509,9 @@ export async function runClientBundleCheck() {
     }
     const select = findRow(renderOverlay(), '__dh_select')
     if (!select) throw new Error('turn switcher select not rendered')
-    if (select.props.value !== '') throw new Error('default view must be the current turn')
+    if (select.props.value !== '') {
+      throw new Error(`default view must be the current turn, got "${select.props.value}"`)
+    }
     // Session totals stay visible under the per-turn counters.
     if (!rendered.includes('sessionTotal')) throw new Error('session totals line missing')
     // Switching turns re-reads stats for the selected turn.
