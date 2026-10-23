@@ -22,6 +22,10 @@ English: [README.md](README.md)
 
 ![设置页里的钩子列表、信任状态与操作](docs/screenshots/settings-hooks.png)
 
+单次运行的明细在消息操作行后面。**钩子统计**弹窗只读一轮、标明是哪一轮，列出这一轮的执行，底部是本会话累计——没有轮次下拉，它只回答你点开它的那条消息：
+
+![钩子统计弹窗：运行、拦截、失败与这一轮的执行历史](docs/screenshots/hook-stats.png)
+
 截图取自本地运行的 dsh，钩子就是 `~/.dsh/hooks.json` 里那两条 `echo-hook` —— 和本仓库示例用的是同一份配置。
 
 ## 兼容性

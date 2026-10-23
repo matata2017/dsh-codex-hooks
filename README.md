@@ -22,6 +22,10 @@ Everything else is managed in **Settings → Hooks**: hooks grouped by where the
 
 ![Settings page listing hooks with trust state and controls](docs/screenshots/settings-hooks.png)
 
+Per-run detail lives behind the message action row. The **Hook stats** dialog reads one turn, names it, and lists that turn's runs with the session totals underneath — no turn picker, it answers for the message you opened it from:
+
+![Hook stats dialog: runs, blocked, failed and the run history of one turn](docs/screenshots/hook-stats.png)
+
 The screenshots come from a local dsh install running the two `echo-hook` entries in `~/.dsh/hooks.json` — the same config the examples in this repo use.
 
 ## Compatibility
