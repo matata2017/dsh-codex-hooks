@@ -146,8 +146,6 @@ window.__ModuleLoader__.load({
       statusFailed: '失败',
       statusSkipped: '已跳过',
       statusRunning: '运行中',
-      turnFilter: '轮次',
-      currentTurn: '当前轮',
       turnLabel: '第 {value} 轮',
       noRunsTurn: '这一轮还没有钩子运行过。',
       sessionTotal: '本会话累计：{runs} 次运行 · {blocked} 次拦截 · {failed} 次失败',
@@ -184,7 +182,7 @@ window.__ModuleLoader__.load({
 
     const STYLE = [
       '.__dh_root{display:flex;flex-direction:column;gap:14px;font-size:13px;line-height:1.6;color:var(--dsw-alias-label-primary,#1f2328)}',
-      '.__dh_select{font:inherit;color:inherit;background:var(--dsw-alias-bg-layer-3,#fff);border:1px solid var(--dsw-alias-border-l4,#dce2eb);border-radius:8px;padding:4px 8px;max-width:62%}',
+      '.__dh_modalSub{font-size:12px;color:var(--dsw-alias-label-tertiary,#6b7280);margin:-2px 0 6px}',
       '.__dh_statLive{color:var(--dsw-alias-state-business-primary,#3964fe)}',
       '.__dh_title{font-size:16px;font-weight:600;margin:0}',
       '.__dh_subtitle{font-size:12px;color:var(--dsw-alias-label-tertiary,#6b7280);margin:0}',
@@ -1186,32 +1184,23 @@ window.__ModuleLoader__.load({
       const [stats, setStats] = React.useState(null)
       const [error, setError] = React.useState(null)
       const [openRun, setOpenRun] = React.useState(null)
-      const [picked, setPicked] = React.useState(null)
       const dialogRef = React.useRef(null)
-      // The opener may ask for a turn (the message action passes the plain
-      // number it knows). The picker then follows whatever the host resolves
-      // that to, and `picked` is remembered together with the request it
-      // answered, so reopening on another message starts over.
+      // One turn per dialog, like Codex: the message action passes the plain
+      // number of the turn it belongs to, and without one the host reads the
+      // turn the session is on. There is no picker — the dialog answers for
+      // the message you opened it from.
       const requested = view.statsTurn ?? null
-      const turn = picked && picked.request === requested ? picked.turn : requested
 
       const refresh = React.useCallback(async () => {
         if (!conn) return
         try {
-          const value = await call('stats', { turn })
-          // A requested turn can age out of the 200 row buffer, and a label can
-          // resolve to that turn's key. Follow the host instead of pinning the
-          // picker to a value the host does not have. Without a request the
-          // picker stays on "current turn", which tracks the host by itself.
-          if (requested !== null && value?.turn !== turn) {
-            setPicked({ request: requested, turn: value?.turn ?? null })
-          }
+          const value = await call('stats', { turn: requested })
           setStats(value)
           setError(null)
         } catch (failure) {
           setError(failure?.message ?? String(failure))
         }
-      }, [conn, turn, requested])
+      }, [conn, requested])
 
       React.useEffect(() => {
         refresh()
@@ -1272,32 +1261,11 @@ window.__ModuleLoader__.load({
               '\u00d7',
             ),
           ),
-          turns.length > 1
+          stats?.turn
             ? h(
                 'div',
-                { className: '__dh_statRow' },
-                h('span', null, t('turnFilter')),
-                h(
-                  'select',
-                  {
-                    className: '__dh_select',
-                    value: turn ?? '',
-                    'aria-label': t('turnFilter'),
-                    onChange: (event) =>
-                      setPicked({
-                        request: requested,
-                        turn: event.target.value === '' ? null : event.target.value,
-                      }),
-                  },
-                  h('option', { value: '' }, t('currentTurn')),
-                  turns.map((entry) =>
-                    h(
-                      'option',
-                      { key: entry.turn, value: entry.turn },
-                      `${t('turnLabel', { value: entry.label })} \u00b7 ${entry.runs} \u00b7 ${clockTime(entry.lastAt)}`,
-                    ),
-                  ),
-                ),
+                { className: '__dh_modalSub' },
+                t('turnLabel', { value: stats.label }),
               )
             : null,
           h(

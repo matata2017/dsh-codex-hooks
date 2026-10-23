@@ -267,12 +267,16 @@ export async function runClientBundleCheck() {
   }
 
   const calls = []
+  // The turn each stats read asked for, in order: the dialog has no picker, so
+  // this is the only way to see which turn it opened on.
+  const statTurns = []
   const registrations = []
   const decorations = []
   const connection = {
     rpc: {
       call: async (route, method, payload) => {
         calls.push(method)
+        if (method === 'hooks/stats') statTurns.push(payload?.args?.turn ?? null)
         if (method === 'hooks/list') return { ok: true, value: FAKE_DATA }
         if (method === 'hooks/stats') {
           // Mirror the host: a requested turn is honoured only while it is still
@@ -487,40 +491,35 @@ export async function runClientBundleCheck() {
     )
     if (tail !== null) throw new Error('the turn tail renderer must draw nothing')
     await ensureClosed()
+    statTurns.length = 0
     const button = findRow(renderAction({ messageId: 'm-2' }), '__dh_actionBtn')
     if (!button) throw new Error('message action button not rendered')
     button.props.onClick()
     await settle()
     await settle()
-    const select = findRow(renderOverlay(), '__dh_select')
-    if (!select) throw new Error('turn switcher select not rendered')
-    if (select.props.value !== 'sess#2') {
-      throw new Error(`dialog must open on the clicked message's turn, got "${select.props.value}"`)
+    if (!statTurns.includes('2')) {
+      throw new Error(`dialog must ask for the clicked message's turn, asked for: ${statTurns.join(',')}`)
     }
-    return 'sess#2'
+    const rendered = text(renderOverlay()).join(' ')
+    if (!rendered.includes('turnLabel')) throw new Error(`the turn is not shown: ${rendered}`)
+    return 'turn 2'
   })
 
-  await check('client/统计对话框按轮次展示并带轮次切换器', async () => {
+  await check('client/统计对话框只读一轮，没有轮次切换器', async () => {
     await openStatsDialog()
-    const rendered = text(renderOverlay()).join(' ')
-    // Turn switcher: more than one turn in the index renders the filter row.
-    for (const needle of ['turnFilter', 'currentTurn', 'turnLabel']) {
+    const tree = renderOverlay()
+    const rendered = text(tree).join(' ')
+    // Codex has no turn picker in Hook stats, and neither do we: the dialog
+    // answers for the message it was opened from.
+    if (findRow(tree, '__dh_select')) throw new Error('the turn picker must be gone')
+    for (const needle of ['turnFilter', 'currentTurn']) {
+      if (rendered.includes(needle)) throw new Error(`picker label "${needle}" still rendered`)
+    }
+    // The turn is still named, just not selectable.
+    for (const needle of ['turnLabel', 'runs', 'blocked', 'failed', 'runHistory', 'sessionTotal']) {
       if (!rendered.includes(needle)) throw new Error(`missing "${needle}" in: ${rendered}`)
     }
-    const select = findRow(renderOverlay(), '__dh_select')
-    if (!select) throw new Error('turn switcher select not rendered')
-    if (select.props.value !== '') {
-      throw new Error(`default view must be the current turn, got "${select.props.value}"`)
-    }
-    // Session totals stay visible under the per-turn counters.
-    if (!rendered.includes('sessionTotal')) throw new Error('session totals line missing')
-    // Switching turns re-reads stats for the selected turn.
-    const before = calls.length
-    select.props.onChange({ target: { value: 'sess#2' } })
-    renderOverlay()
-    await settle()
-    if (calls.length <= before) throw new Error('switching turns did not re-read stats')
-    return 'turn-scoped'
+    return 'one turn'
   })
 
   await check('client/统计对话框打开期间轮询实现准实时', async () => {
