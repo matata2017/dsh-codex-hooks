@@ -131,7 +131,9 @@ Restart the dsh web/desktop host afterwards, then open **Settings → Hooks**.
 }
 ```
 
-One object per hook: `command` (or `type: "mcp_tool"` with `server` + `tool`), optional `matcher`, `timeout`, `statusMessage`, `additionalContextLimit`, `async`.
+One object per hook: `command` (or `type: "mcp_tool"` with `server` + `tool`), optional `matcher`, `timeout`, `statusMessage`, `additionalContextLimit`, `async`, `firstStepOnly`.
+
+`firstStepOnly` (`agent/pre-step` only): `agent/pre-step` fires before **every step** of a turn. With `true`, the hook runs on the first step only (the one carrying the user message); later steps never start the command, and the stats dialog counts one run per turn. Use it for hooks that only care about the prompt (memory recall, prompt rewriting). It is part of the trust fingerprint, so adding it asks for review again; leaving it out or `false` keeps the fingerprint unchanged.
 
 Handler types: `command` is the only one executed. `mcp_tool`, `prompt` and `agent` are parsed and reviewable but not dispatched — they show up as installed, never as active, because a hook that silently does nothing is worse than one that says so.
 

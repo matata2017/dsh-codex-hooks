@@ -27,6 +27,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import * as spec from '../lib/core.js'
+import { hookApplies } from '../lib/events.js'
 import { runClientBundleCheck } from './client-bundle.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -310,6 +311,28 @@ test('describe/遍历顺序与 state key', () => {
   return '3 entries'
 })
 
+test('firstStepOnly/只在 agent/pre-step 上接受布尔值', () => {
+  const ok = spec.parseHooksFile(JSON.stringify({ hooks: { 'agent/pre-step': [{ command: 'a', firstStepOnly: true }] } }))
+  assertEqual(ok.events['agent/pre-step'][0].hooks[0].firstStepOnly, true, 'kept')
+  let error = null
+  try { spec.parseHooksFile(JSON.stringify({ hooks: { 'agent/pre-step': [{ command: 'a', firstStepOnly: 'yes' }] } })) } catch (e) { error = e }
+  assert(error && /must be true or false/.test(error.message), 'non-boolean rejected')
+  error = null
+  try { spec.parseHooksFile(JSON.stringify({ hooks: { 'tools/pre-execute': [{ command: 'a', firstStepOnly: true }] } })) } catch (e) { error = e }
+  assert(error && /only applies to agent\/pre-step/.test(error.message), 'other events rejected')
+  return 'pre-step only'
+})
+
+test('firstStepOnly/写进信任哈希；不写时哈希不变', () => {
+  const base = { type: 'command', command: 'node hook.mjs' }
+  const plain = spec.hookHash({ eventName: 'agent/pre-step', handler: base })
+  const off = spec.hookHash({ eventName: 'agent/pre-step', handler: { ...base, firstStepOnly: false } })
+  const on = spec.hookHash({ eventName: 'agent/pre-step', handler: { ...base, firstStepOnly: true } })
+  assertEqual(off, plain, 'false keeps the fingerprint already trusted')
+  assert(on !== plain, 'true changes what runs, so it changes the fingerprint')
+  return 'hash covers it'
+})
+
 // ---------------------------------------------------------------------------
 // C. matcher
 // ---------------------------------------------------------------------------
@@ -359,6 +382,27 @@ test('matcher/只有工具类 seam 支持 matcher', () => {
 test('matcher/精确与正则在缺 input 时不匹配', () => {
   assert(!spec.matchMatcher('Bash', null), 'exact without input')
   assert(!spec.matchMatcher('^Bash$', undefined), 'regex without input')
+  return 'ok'
+})
+
+test('firstStep/一轮只认第一步，换轮、换会话重新算', () => {
+  const isFirst = spec.createStepTracker()
+  assert(isFirst('s1', 7), 'turn 7 step 1')
+  assert(!isFirst('s1', 7), 'turn 7 step 2')
+  assert(!isFirst('s1', 7), 'turn 7 step 3')
+  assert(isFirst('s2', 7), 'another session')
+  assert(isFirst('s1', 8), 'next turn')
+  assert(isFirst('s1', undefined) && isFirst('s1', undefined), 'unknown turn always runs')
+  return 'ok'
+})
+
+test('firstStep/firstStepOnly 的钩子在后续步骤不启动，其他钩子照跑', () => {
+  const only = { handler: { type: 'command', command: 'a', firstStepOnly: true } }
+  const every = { handler: { type: 'command', command: 'b' } }
+  assert(hookApplies(only, 'agent/pre-step', { firstStep: true }), 'first step runs')
+  assert(!hookApplies(only, 'agent/pre-step', { firstStep: false }), 'later step skipped')
+  assert(hookApplies(every, 'agent/pre-step', { firstStep: false }), 'hooks without it run every step')
+  assert(hookApplies(only, 'agent/pre-step', {}), 'unknown step runs')
   return 'ok'
 })
 
