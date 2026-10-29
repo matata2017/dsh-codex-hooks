@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixture = join(here, 'fixture-hook.mjs')
+const parallelFixture = join(here, 'parallel-hook.mjs')
 
 const home = mkdtempSync(join(tmpdir(), 'dsh-hooks-home-'))
 const workspace = mkdtempSync(join(tmpdir(), 'dsh-hooks-workspace-'))
@@ -47,6 +48,10 @@ async function checkAsync(name, run) {
     failures.push(`${name}: ${error.message}`)
     console.log(`  FAIL ${name}\n       ${error.message}`)
   }
+}
+
+function command(delay, output = '', decision = '') {
+  return `node "${parallelFixture}" ${delay} ${JSON.stringify(output)} ${decision}`
 }
 
 /* ---------------- fake cordis context ---------------- */
@@ -267,6 +272,156 @@ await checkAsync('untrusted hooks are not executed', async () => {
     async () => ({ kind: 'enter', messages }),
   )
   assert.equal(decision.messages.length, 1)
+})
+
+/* ---------------- synchronous hook parallelism ---------------- */
+
+const parallelHooks = {
+  version: 1,
+  hooks: {
+    'agent/pre-step': [
+      { command: command(1000, 'slow') },
+      { command: command(1000, 'slow2') },
+    ],
+    'tools/pre-execute': [
+      { matcher: '*', command: command(100, '', 'allow') },
+      { matcher: '*', command: command(300, '', 'block') },
+    ],
+  },
+}
+writeFileSync(join(home, 'hooks.json'), JSON.stringify(parallelHooks), 'utf8')
+const parallelRows = core.describeHooks(core.parseHooksFile(JSON.stringify(parallelHooks)), {
+  sourceKey,
+  platform: process.platform,
+})
+core.writeStateFile(join(home, 'hooks.state.json'), {
+  states: Object.fromEntries(parallelRows.map((row) => [row.key, { enabled: true, trustedHash: row.hash }])),
+})
+const parallelCtx = createCtx()
+apply(parallelCtx, { profileDir: null })
+const parallelAgent = { id: 'parallel-agent', type: 'main', session: { id: 'parallel-session', header: { cwd: workspace } } }
+const parallelMessages = [{ role: 'user', content: [{ type: 'text', text: 'parallel' }] }]
+
+await checkAsync('synchronous hooks run concurrently and preserve configuration order', async () => {
+  const started = Date.now()
+  const decision = await parallelCtx.emit(
+    'agent/pre-step',
+    { agent: parallelAgent, messages: parallelMessages, turn: { id: 'parallel-turn' }, step: 1 },
+    async () => ({ kind: 'enter', messages: parallelMessages }),
+  )
+  const elapsed = Date.now() - started
+  // 两个 1 秒的钩子：并行 ≈1 秒，串行 ≈2 秒
+  assert(elapsed < 1500, `hooks took ${elapsed}ms; expected about one second, not two`)
+  assert.equal(decision.messages.at(-1).content[0].text, 'slow\n\nslow2')
+})
+
+await checkAsync('a blocking hook wins over an allowing hook', async () => {
+  const result = await parallelCtx.emit(
+    'tools/pre-execute',
+    { agent: parallelAgent, name: 'Write', arguments: {}, callId: 'parallel-call' },
+    async () => ({ kind: 'allow' }),
+  )
+  assert.deepEqual(result, { kind: 'deny', reason: 'denied by test hook' })
+})
+
+const timeoutHooks = {
+  version: 1,
+  hooks: { 'agent/pre-step': [{ timeout: 1, command: command(2000, 'late') }, { command: command(100, 'quick') }] },
+}
+writeFileSync(join(home, 'hooks.json'), JSON.stringify(timeoutHooks), 'utf8')
+const timeoutRows = core.describeHooks(core.parseHooksFile(JSON.stringify(timeoutHooks)), { sourceKey, platform: process.platform })
+core.writeStateFile(join(home, 'hooks.state.json'), {
+  states: Object.fromEntries(timeoutRows.map((row) => [row.key, { enabled: true, trustedHash: row.hash }])),
+})
+const timeoutCtx = createCtx()
+apply(timeoutCtx, { profileDir: null })
+await checkAsync('a timed-out hook does not suppress another result', async () => {
+  const started = Date.now()
+  const decision = await timeoutCtx.emit(
+    'agent/pre-step',
+    { agent: parallelAgent, messages: parallelMessages, turn: { id: 'timeout-turn' }, step: 1 },
+    async () => ({ kind: 'enter', messages: parallelMessages }),
+  )
+  assert(Date.now() - started < 1800, 'timeout waited for the other hook')
+  assert.match(decision.messages.at(-1).content[0].text, /quick/u)
+})
+
+const asyncHooks = {
+  version: 1,
+  hooks: {
+    'agent/pre-step': [
+      { async: true, command: command(600, 'background') },
+      { command: command(100, 'foreground') },
+    ],
+  },
+}
+writeFileSync(join(home, 'hooks.json'), JSON.stringify(asyncHooks), 'utf8')
+const asyncRows = core.describeHooks(core.parseHooksFile(JSON.stringify(asyncHooks)), { sourceKey, platform: process.platform })
+core.writeStateFile(join(home, 'hooks.state.json'), {
+  states: Object.fromEntries(asyncRows.map((row) => [row.key, { enabled: true, trustedHash: row.hash }])),
+})
+const asyncCtx = createCtx()
+apply(asyncCtx, { profileDir: null })
+await checkAsync('an async hook stays in the background and is still recorded', async () => {
+  const started = Date.now()
+  const decision = await asyncCtx.emit(
+    'agent/pre-step',
+    { agent: parallelAgent, messages: parallelMessages, turn: { id: 'async-turn' }, step: 1 },
+    async () => ({ kind: 'enter', messages: parallelMessages }),
+  )
+  const elapsed = Date.now() - started
+  assert(elapsed < 500, `the event waited for the async hook: ${elapsed}ms`)
+  assert.equal(decision.messages.at(-1).content[0].text, 'foreground', 'async output is not in the waterfall')
+  assert.equal(asyncCtx.services.get('hooksController').stats().session.runs, 1, 'only the synchronous hook ran so far')
+
+  await new Promise((resolve) => setTimeout(resolve, 900))
+  assert.equal(asyncCtx.services.get('hooksController').stats().session.runs, 2, 'the async hook was recorded when it finished')
+})
+
+/* ---------------- turn-stopping: an objection steers instead of closing ---------------- */
+
+const stopHooks = {
+  version: 1,
+  hooks: { 'agent/turn-stopping': [{ command: command(0, '', 'block') }] },
+}
+writeFileSync(join(home, 'hooks.json'), JSON.stringify(stopHooks), 'utf8')
+const stopRows = core.describeHooks(core.parseHooksFile(JSON.stringify(stopHooks)), { sourceKey, platform: process.platform })
+core.writeStateFile(join(home, 'hooks.state.json'), {
+  states: Object.fromEntries(stopRows.map((row) => [row.key, { enabled: true, trustedHash: row.hash }])),
+})
+const stopCtx = createCtx()
+apply(stopCtx, { profileDir: null })
+await checkAsync('a turn-stopping objection steers its reason into the next step', async () => {
+  const steered = []
+  const agent = { id: 'stop-agent', type: 'main', session: { id: 'stop-session', header: { cwd: workspace } }, steer: (message) => steered.push(message) }
+  await stopCtx.emit('agent/turn-stopping', { agent, turn: { id: 'stop-turn' } })
+  assert.equal(steered.length, 1, 'the objection must keep the turn open with one steered message')
+  assert.match(steered[0].content[0].text, /denied by test hook/u)
+})
+
+const quietStopHooks = {
+  version: 1,
+  hooks: { 'agent/turn-stopping': [{ command: command(0, '') }] },
+}
+writeFileSync(join(home, 'hooks.json'), JSON.stringify(quietStopHooks), 'utf8')
+const quietRows = core.describeHooks(core.parseHooksFile(JSON.stringify(quietStopHooks)), { sourceKey, platform: process.platform })
+core.writeStateFile(join(home, 'hooks.state.json'), {
+  states: Object.fromEntries(quietRows.map((row) => [row.key, { enabled: true, trustedHash: row.hash }])),
+})
+const quietCtx = createCtx()
+apply(quietCtx, { profileDir: null })
+await checkAsync('a quiet turn-stopping hook steers nothing', async () => {
+  const steered = []
+  const agent = { id: 'quiet-agent', type: 'main', session: { id: 'quiet-session', header: { cwd: workspace } }, steer: (message) => steered.push(message) }
+  await quietCtx.emit('agent/turn-stopping', { agent, turn: { id: 'quiet-turn' } })
+  assert.equal(steered.length, 0)
+})
+
+// Restore the original fixture before the pre-existing turn and state checks.
+writeFileSync(join(home, 'hooks.json'), JSON.stringify(hooksFile), 'utf8')
+const restoredRows = core.describeHooks(core.parseHooksFile(JSON.stringify(hooksFile)), { sourceKey, platform: process.platform })
+core.writeStateFile(join(home, 'hooks.state.json'), {
+  states: Object.fromEntries(restoredRows.map((row) => [row.key, { enabled: true, trustedHash: row.hash }])),
 })
 
 /* ---------------- turn scoping (the stats panel bug) ---------------- */

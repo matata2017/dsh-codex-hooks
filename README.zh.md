@@ -46,7 +46,7 @@ English: [README.md](README.md)
   - **来自项目配置文件** —— 本会话碰过的 workspace 里的 `<workspace>/.dsh/hooks.json`（最多记 32 个）。
 - **指纹**：把钩子定义规范化成 JSON，再对它 UTF-8 字节做 `sha256:`。信任就钉在这个指纹上，所以改掉一条钩子的命令，它的信任会自动失效，不会悄悄跑新代码。
 - **逐个审查信任**：新钩子处于*待审核*；你在设置页批准当前指纹，状态存在 `$DSH_HOME/hooks.state.json`，同时每条钩子有独立的启用开关。
-- **执行**：只有既启用又可信的 `command` 处理器才会跑，带自己的超时、`cwd`、环境变量，以及 `command`/`commandWindows` 平台拆分。`approval/request` 钩子可以返回 `{"decision":"allow"}` 直接放行待审批的工具调用，或返回 `deny`；任何一条钩子 deny 都压过 allow。
+- **执行**：只有既启用又可信的 `command` 处理器才会跑，带自己的超时、`cwd`、环境变量，以及 `command`/`commandWindows` 平台拆分。同一事件的同步钩子会并行启动，与 Codex 一致；结果和注入上下文仍按配置顺序合并。`approval/request` 钩子可以返回 `{"decision":"allow"}` 直接放行待审批的工具调用，或返回 `deny`；任何一条钩子 deny 都压过 allow。
 - **注入上下文**：处理器返回的 `additionalContext` 会追加到模型输入，适用于 `agent/pre-step`、`tools/pre-execute`、`tools/post-execute`、`agent/created`（默认上限 2500 字符）。
 - **匹配**：工具类 seam（`tools/pre-execute`、`tools/post-execute`、`approval/request`）支持 matcher：`*`、精确名、`A|B` 多选或正则。
 
